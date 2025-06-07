@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Source all helper modules (fail fast if missing)
 for mod in modules/*.sh; do
     if [[ ! -f "$mod" ]]; then
         echo -e "\033[1;31m[!] Missing required module: $mod\033[0m" >&2
@@ -13,23 +12,25 @@ done
 main() {
     mkdir -p output
     local outdir="output"
-    banner "$outdir"
+    banner
+
     check_dependencies "$outdir"
 
-    local selected_domains
-    selected_domains=($(get_domains "$outdir"))
+    echo -e "\n\033[1;36m[VENO] DOMAIN INPUT\033[0m"
+    IFS=$'\n' read -r -d '' -a selected_domains < <(get_domains "$outdir"; printf '\0')
 
-    # Structured config retrieval
-    local scan_config scan_intensity threads hak_depth sqlmap_flags wordlist recursion_depth
+    echo -e "\n\033[1;36m[VENO] SCAN INTENSITY\033[0m"
+    local scan_config
     scan_config=$(get_scan_intensity "$outdir")
     eval "$scan_config"
 
-    local subdomain_scan
+    echo -e "\n\033[1;36m[VENO] SUBDOMAIN SCAN\033[0m"
     subdomain_scan=$(get_subdomain_scan_choice "$outdir")
 
+    echo -e "\n\033[1;36m[VENO] WORDLIST SELECTION\033[0m"
     wordlist=$(get_wordlist "$wordlist" "$outdir")
 
-    local selected_tools
+    echo -e "\n\033[1;36m[VENO] TOOL SELECTION\033[0m"
     selected_tools=$(get_tool_selection "$outdir")
 
     save_config "$outdir" "$selected_tools" "$wordlist" "$scan_config" "$recursion_depth" "$subdomain_scan"
