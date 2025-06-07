@@ -1,4 +1,4 @@
-\#!/bin/bash
+#!/bin/bash
 
 validate_domain() {
     local domain="$1"
