@@ -25,7 +25,8 @@ check_dependencies() {
     local go_tools=("subjack" "waybackurls" "nuclei" "ffuf" "waymore" "uro" "gau" "httprobe" "subfinder")
     local installed_flag="$script_dir/.dependencies_installed"
     local missing_tools=()
-    local pkg_manager=$(detect_package_manager)
+    local pkg_manager
+    pkg_manager=$(detect_package_manager)
 
     echo -e "\033[1;33m[*] Checking for required tools...\033[0m"
     for tool in "${REQUIRED_TOOLS[@]}"; do
@@ -35,7 +36,7 @@ check_dependencies() {
     done
 
     if [ ${#missing_tools[@]} -eq 0 ]; then
-        echo -e "\033[1;32m[✓] All required tools are installed.\033[0m"
+        echo -e "\033[1;32m[\u2713] All required tools are installed.\033[0m"
         touch "$installed_flag" 2>>"$error_log" || echo "Warning: Could not create $installed_flag" >> "$error_log"
         return
     fi
@@ -113,7 +114,7 @@ check_dependencies() {
 
     if [ ${#missing_tools[@]} -eq 0 ]; then
         touch "$installed_flag" 2>>"$error_log" || echo "Warning: Could not create $installed_flag" >> "$error_log"
-        echo -e "\033[1;32m[✓] All tools installed successfully.\033[0m"
+        echo -e "\033[1;32m[\u2713] All tools installed successfully.\033[0m"
     else
         echo -e "\033[1;31m[!] Failed to install: ${missing_tools[*]}. Install manually.\033[0m" >&2
         echo "Remaining missing tools: ${missing_tools[*]}" >> "$error_log"
