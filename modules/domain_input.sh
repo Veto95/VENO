@@ -2,7 +2,7 @@
 
 validate_domain() {
     local domain="$1"
-    if [[ "$domain" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z0-9-]{2,}$ ]]; then
+    if [[ "$domain" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$ ]]; then
         echo "$domain"
     else
         echo ""
@@ -99,7 +99,7 @@ get_domains() {
                     echo -e "\033[1;31m[!] fzf not installed. Selecting first $domain_count domains.\033[0m" | tee -a "$error_log"
                     selected_domains=("${cleaned_domains[@]:0:$domain_count}")
                 else
-                    selected_domains=($(printf "%s\n" "${cleaned_domains[@]}" | timeout -s SIGINT 600 fzf --multi --prompt="Select $domain_count domains: " --height=40% --border --header="Select $domain_count domains" | head -n "$domain_count" 2>>"$error_log"))
+                    selected_domains=($(printf "%s\n" "${cleaned_domains[@]}" | timeout -s SIGINT 600 fzf --multi --prompt="Select $domain_count domains: " --height=40% --border --header="Select $domain_count domains"))
                     if [ $? -ne 0 ] || [ "${#selected_domains[@]}" -ne "$domain_count" ]; then
                         echo -e "\033[1;31m[!] Selection failed or incorrect number selected.\033[0m" | tee -a "$error_log"
                         continue
