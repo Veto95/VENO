@@ -1,4 +1,3 @@
-# main.sh
 #!/bin/bash
 set -o pipefail
 
