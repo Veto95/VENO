@@ -20,7 +20,11 @@ banner() {
         (__)   (__)    (_)     
 
              VENO v1.0
-         coder: 0xCACT2S
+        BUG HUNTING & RECON TOOL
+
+         coder: 0xCACT2S 
+ Telegram: HELL SHELL [https://t.me/hacking_hell1]
+   GitHub: https://github.com/Veto95/VENO
 EOF
         printf "\033[0m\n"
     } 2>>"$error_log" || echo "Failed to render banner" >> "$error_log"
