@@ -15,7 +15,7 @@ get_scan_intensity() {
         case $intensity in
             1) echo "threads=50 hak_depth=2 sqlmap_flags='--batch --random-agent' wordlist='/usr/share/wordlists/raft-medium-directories.txt' recursion_depth=1"; break;;
             2) echo "threads=100 hak_depth=3 sqlmap_flags='--batch --random-agent --level=3 --risk=2 --tamper=space2comment' wordlist='/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt' recursion_depth=2"; break;;
-            3) echo "threads=200 hak_depth=5 sqlmap_flags='--batch --random-agent --level=5 --risk=3 --tamper=space2comment,charunicodeencode' wordlist='/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt' recursion_depth=3"; break;;
+            3) echo "threads=200 hak_depth=5 sqlmap_flags='--batch --random-agent --level=5 --risk=3 --tamper=space2comment,charunicodeencode' wordlist='/usr/share/wordlists/dirbuster/directory-list-larges.txt' recursion_depth=3"; break;;
             *) echo -e "\033[1;31m[!] Invalid choice. Enter '1', '2', or '3'.\033[0m" | tee -a "$error_log";;
         esac
     done
@@ -115,7 +115,7 @@ save_config() {
 }
 EOF
     if [ $? -eq 0 ]; then
-        echo -e "\033[1;32m[✓] Configuration saved to $config_file\033[0m"
+        echo -e "\033[1;32m[\u2713] Configuration saved to $config_file\033[0m"
     else
         echo -e "\033[1;31m[!] Failed to save config to $config_file\033[0m" | tee -a "$error_log"
         exit 1
