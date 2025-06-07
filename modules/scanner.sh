@@ -10,6 +10,7 @@ scan_domain() {
     local selected_tools="$7"
     local recursion_depth="$8"
     local subdomain_scan="$9"
+
     local sanitized_domain
     sanitized_domain=$(sanitize_domain "$domain" "$outdir")
     local error_log="$outdir/$sanitized_domain/errors.log"
@@ -20,12 +21,11 @@ scan_domain() {
         return 1
     }
 
-    # Subdomain enumeration
+    # Each tool block checks for tool presence and logs errors.
     if [[ " $selected_tools " =~ " subfinder " ]]; then
         enumerate_subdomains "$domain" "$outdir" "$selected_tools" "$recursion_depth" 1 "$subdomain_scan"
     fi
 
-    # theHarvester
     if [[ " $selected_tools " =~ " theHarvester " ]]; then
         echo -e "\033[1;36m[+] Running theHarvester for $domain\033[0m" | tee -a "$outdir/scan.log"
         timer_start
@@ -40,7 +40,6 @@ scan_domain() {
         timer_end "$outdir"
     fi
 
-    # subjack
     if [[ " $selected_tools " =~ " subjack " ]]; then
         echo -e "\033[1;36m[+] Running subjack for $domain\033[0m" | tee -a "$outdir/scan.log"
         timer_start
@@ -55,7 +54,6 @@ scan_domain() {
         timer_end "$outdir"
     fi
 
-    # waybackurls
     if [[ " $selected_tools " =~ " waybackurls " ]]; then
         echo -e "\033[1;36m[+] Running waybackurls for $domain\033[0m" | tee -a "$outdir/scan.log"
         timer_start
@@ -70,23 +68,19 @@ scan_domain() {
         timer_end "$outdir"
     fi
 
-    # Sensitive files
     if [[ " $selected_tools " =~ " extract_sensitive " ]]; then
         extract_sensitive_files "$domain" "$outdir" "$selected_tools"
     fi
 
-    # Juicy info and JS files
     if [[ " $selected_tools " =~ " grep_juicy " ]]; then
         extract_juicy_info "$domain" "$outdir" "$selected_tools"
         extract_js_files "$domain" "$outdir" "$selected_tools"
     fi
 
-    # Parameter discovery
     if [[ " $selected_tools " =~ " paramspider " ]]; then
         discover_parameters "$domain" "$outdir" "$selected_tools"
     fi
 
-    # nuclei
     if [[ " $selected_tools " =~ " nuclei " ]]; then
         echo -e "\033[1;36m[+] Updating nuclei templates\033[0m" | tee -a "$outdir/scan.log"
         timer_start
@@ -107,26 +101,21 @@ scan_domain() {
         timer_end "$outdir"
     fi
 
-    # ffuf
     if [[ " $selected_tools " =~ " ffuf " ]]; then
         scan_ffuf "$domain" "$outdir" "$wordlist" "$selected_tools"
     fi
 
-    # dirsearch
     if [[ " $selected_tools " =~ " dirsearch " ]]; then
         scan_dirsearch "$domain" "$outdir" "$wordlist" "$selected_tools"
     fi
 
-    # XSS scan
     if [[ " $selected_tools " =~ " dalfox " || " $selected_tools " =~ " xsstrike " ]]; then
         run_xss_scan "$domain" "$outdir" "$selected_tools"
     fi
 
-    # SQLmap
     if [[ " $selected_tools " =~ " sqlmap " ]]; then
         run_sqlmap "$domain" "$outdir" "$selected_tools" "$sqlmap_flags"
     fi
 
-    # HTML Report
     generate_html_report "$domain" "$outdir"
 }
