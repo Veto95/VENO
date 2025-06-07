@@ -20,20 +20,18 @@ timer_end() {
     local outdir="$1"
     echo -e "\033[1;34m[*] Step completed in ${duration}s\033[0m" | tee -a "$outdir/scan.log"
 }
+
 generate_html_report() {
     local domain="$1"
     local outdir="$2"
     local sanitized_domain
     sanitized_domain=$(sanitize_domain "$domain" "$outdir")
     local report="$outdir/${sanitized_domain}/report.html"
-    local scan_date=$(date '+%Y-%m-%d %H:%M:%S')
+    local scan_date
+    scan_date=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Count findings for graph data
-    local subdomains_count=0
-    local params_count=0
-    local xss_count=0
-    local sqli_count=0
-    local takeover_count=0
+    local subdomains_count=0 params_count=0 xss_count=0 sqli_count=0 takeover_count=0
 
     [[ -f "$outdir/$sanitized_domain/subdomains.txt" ]] && subdomains_count=$(wc -l < "$outdir/$sanitized_domain/subdomains.txt")
     [[ -f "$outdir/$sanitized_domain/paramspider.txt" ]] && params_count=$(wc -l < "$outdir/$sanitized_domain/paramspider.txt")
