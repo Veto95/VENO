@@ -6,6 +6,7 @@ set -o pipefail
 for mod in modules/*.sh; do source "$mod"; done
 
 main() {
+    mkdir -p output
     local outdir="output"
     banner "$outdir"
     check_dependencies "$outdir"
