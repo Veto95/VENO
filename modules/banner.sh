@@ -27,5 +27,5 @@ banner() {
    GitHub: https://github.com/Veto95/VENO
 EOF
         printf "\033[0m\n"
-    } 2>>"$error_log" || echo "Failed to render banner" >> "$error_log"
+    } 
 }
