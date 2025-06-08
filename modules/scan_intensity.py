@@ -39,15 +39,13 @@ def suggest_tools(scan_config, subdomain_scan):
     elif scan_config["intensity"] == "deep":
         base = [
             "subfinder", "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
-            "arjun", "sqlmap", "ffuf", "dirsearch", "dalfox", "waymore", "uro", "xsstrike"
+            "arjun", "sqlmap", "ffuf", "dirsearch", "dalfox", "waymore", "uro", "XSStrike"
         ]
     else:  # normal
         base = [
             "subfinder", "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
             "ffuf", "dirsearch", "dalfox"
         ]
-    if not subdomain_scan and "subfinder" in base:
-        base.remove("subfinder")
-    if not subdomain_scan and "subjack" in base:
-        base.remove("subjack")
+    if not subdomain_scan:
+        base = [t for t in base if t not in ("subfinder", "subjack")]
     return base
