@@ -15,7 +15,7 @@ VENO Automated Recon Shell Commands:
     help               Show this help message
     exit, quit         Exit the shell
 
-Scan intensities (affect wordlist/tools/threads): low, medium, high, max
+Scan intensities (affect wordlist/tools/threads): low, medium, high
 """)
 
 def show_options(config):
