@@ -1,4 +1,5 @@
 import os
+import logging
 
 COMMON_WORDLISTS = {
     "SecLists: Discovery/Web-Content/common.txt": "/usr/share/seclists/Discovery/Web-Content/common.txt",
@@ -7,6 +8,13 @@ COMMON_WORDLISTS = {
 }
 
 def get_wordlist(output_dir):
+    # Check environment variable for automation/headless mode
+    env_wordlist = os.environ.get("VENO_WORDLIST")
+    if env_wordlist and os.path.isfile(env_wordlist):
+        logging.info(f"Using wordlist from VENO_WORDLIST: {env_wordlist}")
+        return env_wordlist
+
+    # List common wordlists for interactive selection
     print("\n[VENO] Wordlist Selection")
     print("Available wordlists:")
     for idx, (desc, path) in enumerate(COMMON_WORDLISTS.items(), 1):
@@ -22,7 +30,11 @@ def get_wordlist(output_dir):
                 else:
                     print("[!] File not found. Try again.")
             elif 1 <= choice <= len(COMMON_WORDLISTS):
-                return list(COMMON_WORDLISTS.values())[choice-1]
+                path = list(COMMON_WORDLISTS.values())[choice - 1]
+                if os.path.isfile(path):
+                    return path
+                else:
+                    print(f"[!] Wordlist not found: {path}")
             else:
                 print("[!] Invalid choice.")
         except ValueError:
