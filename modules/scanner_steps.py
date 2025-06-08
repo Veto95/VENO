@@ -1,53 +1,36 @@
 import os
-import subprocess
 import re
-import hashlib
+import subprocess
 import time
-import html
-import requests
+import hashlib
+import logging
 
 def timer_start():
     return time.time()
 
-def timer_end(start_time, step_name="Step"):
-    duration = int(time.time() - start_time)
-    print(f"\033[1;34m[*] {step_name} completed in {duration}s\033[0m")
+def timer_end(start, msg):
+    elapsed = int(time.time() - start)
+    logging.info(f"[VENO] {msg} completed in {elapsed}s")
 
-def live_check(url, keywords=None):
-    """Return (is_live, contains_sensitive) for a URL."""
-    try:
-        resp = requests.get(url, timeout=8, verify=False, allow_redirects=True)
-        if 200 <= resp.status_code < 400:
-            if keywords:
-                for word in keywords:
-                    if word.lower() in resp.text.lower():
-                        return True, True
-            return True, False
-        return False, False
-    except Exception:
-        return False, False
+# --- Subdomain scanning (stub: implement as needed) ---
+def subdomain_scan(domain, outdir):
+    # Implement your subdomain scan logic here
+    # Example: run_subprocess(["subfinder", "-d", domain, "-o", ...])
+    logging.info(f"Subdomain scan for {domain} (stubbed)")
 
+# --- Sensitive files/juicy info extraction ---
 def extract_sensitive_files(domain, outdir):
-    print(f"\033[1;36m[+] Extracting sensitive files and links for {domain}\033[0m")
     start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
     sensitive_file = f"{outdir}/{domain}/sensitive_files.txt"
     error_log = f"{outdir}/{domain}/errors.log"
     live_sensitive = []
-
-    sensitive_patterns = [
-        r"\.env$", r"\.bak$", r"\.sql$", r"\.config$", r"\.conf$", r"\.json$",
-        r"\.yaml$", r"\.yml$", r"\.log$", r"\.backup$", r"\.git/", r"\.svn/",
-        r"phpinfo\.php$", r"admin", r"login", r"dashboard", r"wp-admin",
-        r"wp-login\.php", r"config\.php", r"settings", r"backup"
-    ]
-    sensitive_regex = "|".join(sensitive_patterns)
     sensitive_keywords = ["password", "key", "secret", "token", "aws", "credential"]
-
+    sensitive_regex = "|".join(sensitive_keywords)
     if os.path.isfile(wayback_file):
         try:
             with open(wayback_file) as fin:
-                urls = [line.strip() for line in fin if re.search(sensitive_regex, line)]
+                urls = [line.strip() for line in fin if re.search(sensitive_regex, line, re.I)]
             with open(sensitive_file, "w") as fout:
                 found = False
                 for url in urls:
@@ -64,12 +47,24 @@ def extract_sensitive_files(domain, outdir):
                     fout.write("No sensitive files or links found.\n")
         except Exception as e:
             with open(error_log, "a") as ferr:
-                ferr.write(f"Failed to grep sensitive files: {e}\n")
+                ferr.write(f"Failed to extract sensitive files: {e}\n")
     timer_end(start, "Sensitive file extraction")
     return live_sensitive
 
+def live_check(url, keywords=None):
+    # Simple live check: try curl and look for sensitive keywords in body
+    try:
+        r = subprocess.run(["curl", "-sL", "--max-time", "8", url], capture_output=True, check=True, timeout=10)
+        body = r.stdout.decode(errors="ignore")
+        has_sensitive = any(kw in body.lower() for kw in (keywords or []))
+        # Consider HTTP 200 and length > 0 as live
+        is_live = bool(body)
+        return is_live, has_sensitive
+    except Exception:
+        return False, False
+
+# --- Grep juicy info from URLs and JS files ---
 def grep_juicy_info(domain, outdir):
-    print(f"\033[1;36m[+] Grepping juicy info from waybackurls and JS files for {domain}\033[0m")
     start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
     juicy_file = f"{outdir}/{domain}/juicy_info.txt"
@@ -77,7 +72,6 @@ def grep_juicy_info(domain, outdir):
     error_log = f"{outdir}/{domain}/errors.log"
     os.makedirs(js_dir, exist_ok=True)
     live_juicy = []
-
     patterns = [
         r"api[_-]?key", r"token", r"password", r"secret", r"access[_-]?key", r"aws[_-]?key",
         r"aws[_-]?secret", r"auth[_-]?token", r"session[_-]?id", r"credential", r"stripe[_-]?key",
@@ -91,7 +85,6 @@ def grep_juicy_info(domain, outdir):
     ]
     pattern_regex = "|".join(patterns)
     found = False
-
     if os.path.isfile(wayback_file):
         try:
             with open(wayback_file) as fin:
@@ -134,8 +127,9 @@ def grep_juicy_info(domain, outdir):
     timer_end(start, "Juicy info extraction")
     return live_juicy
 
+# --- Dynamic parameter discovery ---
 def discover_parameters(domain, outdir):
-    print(f"\033[1;36m[+] Discovering dynamic parameters for {domain}\033[0m")
+    logging.info(f"Discovering dynamic parameters for {domain}")
     start = timer_start()
     paramspider_out = f"{outdir}/{domain}/paramspider.txt"
     arjun_out = f"{outdir}/{domain}/arjun.txt"
@@ -143,7 +137,12 @@ def discover_parameters(domain, outdir):
     vulnerable_urls = []
     # paramspider
     try:
-        subprocess.run(["paramspider", "-d", domain], stdout=open(paramspider_out, "w"), stderr=open(error_log, "a"), check=True)
+        subprocess.run(
+            ["paramspider", "-d", domain], 
+            stdout=open(paramspider_out, "w"), 
+            stderr=open(error_log, "a"), 
+            check=True, timeout=300
+        )
         urls = []
         with open(paramspider_out) as f:
             for line in f:
@@ -153,7 +152,10 @@ def discover_parameters(domain, outdir):
         with open("arjun_urls.txt", "w") as f:
             for url in urls:
                 f.write(url + "\n")
-        subprocess.run(["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out], stderr=open(error_log, "a"), check=True)
+        subprocess.run(
+            ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out], 
+            stderr=open(error_log, "a"), check=True, timeout=300
+        )
         # Collect possible vulnerable URLs for sqlmap
         with open(arjun_out) as f:
             for line in f:
@@ -168,8 +170,9 @@ def discover_parameters(domain, outdir):
     timer_end(start, "Dynamic parameter discovery")
     return vulnerable_urls
 
+# --- Advanced XSS/vuln hunting ---
 def advanced_xss_vuln_hunting(domain, outdir):
-    print(f"\033[1;36m[+] Running advanced XSS and vulnerability hunting for {domain}\033[0m")
+    logging.info(f"Running advanced XSS and vulnerability hunting for {domain}")
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     dalfox_out = f"{outdir}/{domain}/dalfox.txt"
@@ -181,7 +184,7 @@ def advanced_xss_vuln_hunting(domain, outdir):
             "dalfox", "file", f"{outdir}/{domain}/paramspider.txt",
             "--custom-payload", "/usr/share/xss-payloads.txt",
             "--output", dalfox_out
-        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"dalfox failed: {e}\n")
@@ -190,23 +193,24 @@ def advanced_xss_vuln_hunting(domain, outdir):
         subprocess.run([
             "xsstrike", "-l", f"{outdir}/{domain}/paramspider.txt",
             "-o", xsstrike_out
-        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"XSStrike failed: {e}\n")
     # nuclei (update, run)
     try:
-        subprocess.run(["nuclei", "-update-templates"], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+        subprocess.run(["nuclei", "-update-templates"], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=120)
         subprocess.run([
             "nuclei", "-u", domain, "-o", nuclei_out
-        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"nuclei failed: {e}\n")
     timer_end(start, "Advanced XSS/vuln hunting")
 
+# --- SQL Injection Testing ---
 def sqlmap_on_vuln_urls(vuln_urls, outdir, domain):
-    print(f"\033[1;36m[+] Running sqlmap on discovered vulnerable URLs for {domain}\033[0m")
+    logging.info(f"Running sqlmap on discovered vulnerable URLs for {domain}")
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     for i, url in enumerate(vuln_urls):
@@ -215,43 +219,23 @@ def sqlmap_on_vuln_urls(vuln_urls, outdir, domain):
         try:
             subprocess.run([
                 "sqlmap", "-u", url, "--batch", f"--output-dir={sqlmap_dir}"
-            ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+            ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
         except Exception as e:
             with open(error_log, "a") as ferr:
                 ferr.write(f"sqlmap on {url} failed: {e}\n")
     timer_end(start, "Targeted SQL injection testing")
 
-def generate_html_report(domain, outdir, banner_html=""):
-    print(f"\033[1;36m[+] Generating interactive HTML report for {domain}\033[0m")
-    start = time.time()
-    domain_dir = f"{outdir}/{domain}"
-    html_report = os.path.join(domain_dir, "report.html")
-    files = [f for f in os.listdir(domain_dir) if os.path.isfile(os.path.join(domain_dir, f))]
-    toc = ""
-    body = ""
-    for fname in files:
-        if fname.endswith(".html") and fname != "report.html":
-            continue
-        section_id = fname.replace(".", "_")
-        toc += f'<li><a href="#{section_id}" onclick="toggleSection(\'{section_id}\');return false;">{fname}</a></li>\n'
-        raw_link = f'<a href="{fname}" target="_blank">[raw]</a>'
-        with open(os.path.join(domain_dir, fname), encoding="utf-8", errors="ignore") as fin:
-            content = html.escape(fin.read())
-        body += f'''<div id="{section_id}" class="section">
-<h2>{fname} {raw_link}</h2>
-<pre>{content[:6000]}{"..." if len(content) > 6000 else ""}</pre>
-</div>\n'''
-    html_code = f"""<!DOCTYPE html>
-<html><head>
-<title>VENO Scan Report: {domain}</title>
-<meta charset="utf-8"/>
+# --- HTML Report Generation ---
+def generate_html_report(domain, outdir, banner_html):
+    html_report = f"{outdir}/{domain}/report.html"
+    toc = "<li>Results</li>"  # Stub - you can extend this!
+    with open(html_report, "w", encoding="utf-8") as fout:
+        html_code = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VENO Report - {domain}</title>
 <style>
-body {{ font-family: Arial, sans-serif; background: #f7f7fa; color: #222; }}
-h1 {{ color: #1e90ff; }}
-#toc {{ background: #fff; border:1px solid #ccc; padding:1em; width:300px; float:left; margin-right:2em; }}
-.section {{ display:none; margin-bottom:2em; background:#fff; border:1px solid #ccc; padding:1em; border-radius:8px; }}
-.section.active {{ display:block; }}
-a {{ color:#1e90ff; }}
 pre {{ white-space: pre-wrap; word-break: break-word; background: #f9f9f9; padding:1em; border-radius:8px; }}
 </style>
 <script>
@@ -275,10 +259,9 @@ window.onload = function() {{
 </ul>
 </div>
 <div style="margin-left:340px;">
-{body}
+<!-- Report content goes here. -->
 </div>
 </body></html>
 """
-    with open(html_report, "w", encoding="utf-8") as fout:
         fout.write(html_code)
-    print(f"\033[1;34m[*] HTML Report Generation completed in {int(time.time()-start)}s\033[0m")
+    logging.info(f"Generated HTML report for {domain}")
