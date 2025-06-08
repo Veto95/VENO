@@ -1,7 +1,7 @@
 import os
 import logging
 
-# Common wordlists for web/content enumeration
+# \GOD MODE/: Common wordlists for pure web/content enumeration
 COMMON_WORDLISTS = {
     "SecLists: Discovery/Web-Content/common.txt": "/usr/share/seclists/Discovery/Web-Content/common.txt",
     "SecLists: Discovery/Web-Content/big.txt": "/usr/share/seclists/Discovery/Web-Content/big.txt",
@@ -12,7 +12,7 @@ def color(text, code):
     """Return text wrapped in ANSI color codes."""
     return f"\033[{code}m{text}\033[0m"
 
-def get_wordlist(output_dir):
+def get_wordlist(output_dir=None):
     """
     Prompts the user to select a wordlist for scanning.
     - If VENO_WORDLIST env is set and valid, uses that (automation).
@@ -23,8 +23,9 @@ def get_wordlist(output_dir):
     # Automation/headless mode via env
     env_wordlist = os.environ.get("VENO_WORDLIST")
     if env_wordlist and os.path.isfile(env_wordlist):
-        logging.info(color(f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
-        print(color(f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
+        msg = f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}"
+        logging.info(color(msg, "1;32"))
+        print(color(msg, "1;32"))
         return env_wordlist
 
     # Interactive selection
