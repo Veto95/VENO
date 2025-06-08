@@ -1,105 +1,46 @@
-import argparse
-import logging
-import os
 import sys
-from modules.banner import print_banner
-from modules.domain_input import (
-    get_domains,
-    load_domains,
-    clean_domain,
-    validate_domain
-)
-from modules.config import get_config
+import logging
 from modules.scanner import full_scan
 
-try:
-    from rich.console import Console
-    console = Console()
-except ImportError:
-    console = None
-
-def color(text, clr):
-    codes = {"green": "1;32", "red": "1;31", "yellow": "1;33", "cyan": "1;36", "magenta": "1;35", "bold": "1"}
-    return f"\033[{codes.get(clr, '0')}m{text}\033[0m"
-
-def clear_screen():
-    # Cross-platform screen clear
-    if os.name == 'nt':
-        os.system('cls')
-    else:
-        os.system('clear')
-
-def get_valid_domains_from_arg(domains_arg, outdir):
-    # If file, load and validate
-    if os.path.isfile(domains_arg):
-        return load_domains(domains_arg, outdir)
-    # Else, treat as comma/space separated manual input
-    raw_domains = [clean_domain(d) for d in domains_arg.replace(',', ' ').split() if d.strip()]
-    valid_domains = [d for d in raw_domains if validate_domain(d)]
-    if not valid_domains:
-        msg = "[VENO] No valid domains supplied in argument."
-        if console:
-            console.print(f"[bold red]{msg}[/bold red]")
-        else:
-            print(color(msg, "red"))
-        sys.exit(1)
-    return valid_domains
-
 def main():
-    print_banner(console=console, plain_fallback=color)
+    import argparse
 
-    parser = argparse.ArgumentParser(description="VENO Automated Bug Bounty Scanner [DEUS ACTIVE MODE]")
-    parser.add_argument("--intensity", choices=["low", "medium", "high", "max"], default="medium", help="Scan intensity")
-    parser.add_argument("--output", default="output", help="Output directory")
-    parser.add_argument("--domains", help="Comma/space separated domains or path to file (overrides interactive prompt)")
+    parser = argparse.ArgumentParser(description="VENO Automated Recon Scanner")
+    parser.add_argument("domain", help="Target domain to scan (e.g. example.com)")
+    parser.add_argument("-o", "--output", default="output", help="Output directory")
+    parser.add_argument("--no-subdomains", action="store_true", help="Skip subdomain scan")
+    parser.add_argument("--threads", type=int, default=5, help="Threads for applicable tools")
+    parser.add_argument("--wordlist", default="", help="Custom wordlist for fuzzing/discovery")
+    parser.add_argument("--banner-html", default="", help="Custom HTML banner for report")
+
     args = parser.parse_args()
 
-    outdir = args.output.strip()
-    scan_intensity = args.intensity
+    config = {
+        "output_dir": args.output,
+        "subdomains": not args.no_subdomains,
+        "banner_html": args.banner_html,
+        "scan_config": {
+            "threads": args.threads,
+        },
+        "wordlist": args.wordlist,
+    }
 
-    # Get domains (from env, CLI, file, or interactive)
-    if args.domains:
-        domains = get_valid_domains_from_arg(args.domains.strip(), outdir)
-    else:
-        domains = get_domains(outdir)
+    logging.basicConfig(
+        filename=f"{args.output}/{args.domain}/veno.log",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s"
+    )
 
-    if not domains:
-        msg = "[VENO] No valid domains supplied. Exiting."
-        if console:
-            console.print(f"[bold red]{msg}[/bold red]")
-        else:
-            print(color(msg, "red"))
+    print(f"\033[1;35m[VENO]\033[0m Starting full scan for \033[1;36m{args.domain}\033[0m")
+    try:
+        full_scan(args.domain, config)
+        print(f"\033[1;32m[VENO]\033[0m Scan completed for \033[1;36m{args.domain}\033[0m")
+    except KeyboardInterrupt:
+        print(f"\033[1;31m[VENO]\033[0m Scan interrupted by user!")
         sys.exit(1)
-
-    configs = []
-    for domain in domains:
-        config = get_config(domain=domain, output_dir=outdir, scan_intensity=scan_intensity)
-        configs.append((domain, config))
-
-    # Clear screen and show only the banner before scanning
-    clear_screen()
-    print_banner(console=console, plain_fallback=color)
-
-    for domain, config in configs:
-        domain_dir = os.path.join(outdir, domain)
-        os.makedirs(domain_dir, exist_ok=True)
-        log_file = os.path.join(domain_dir, "veno.log")
-        logger = logging.getLogger(domain)
-        logger.setLevel(logging.INFO)
-        # Remove previous handlers
-        if logger.hasHandlers():
-            logger.handlers.clear()
-        handler = logging.FileHandler(log_file, mode="w")
-        formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        # Run full scan
-        results = full_scan(domain, config)
-        msg = f"[VENO] Scan complete for {domain}! See {outdir}/{domain}/report.html"
-        if console:
-            console.print(f"[bold green]{msg}[/bold green]")
-        else:
-            print(color(msg, "green"))
+    except Exception as e:
+        print(f"\033[1;31m[VENO]\033[0m Fatal error: {e}")
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()
