@@ -1,10 +1,10 @@
 import sys
 import logging
-from modules.banner import BANNER
+from modules.banner import banner
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 
-print(BANNER)
+print(banner)
 
 def print_help():
     print("""
