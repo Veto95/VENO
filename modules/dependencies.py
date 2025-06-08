@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 import sys
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 
@@ -33,7 +32,8 @@ TOOL_INSTALL_CMDS = {
     "dig": "sudo apt install -y dnsutils",
     "fzf": "sudo apt install -y fzf",
 }
-REQUIRED_TOOLS = list(TOOL_INSTALL_CMDS.keys())
+dependencies = list(TOOL_INSTALL_CMDS.keys())
+REQUIRED_TOOLS = dependencies
 ERROR_LOG = "dependency_error.log"
 MAX_THREADS = 8
 
