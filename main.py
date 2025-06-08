@@ -2,7 +2,15 @@ import os
 import sys
 import traceback
 import warnings
-import urllib3
+
+# Suppress unverified HTTPS warnings for a cleaner experience
+with warnings.catch_warnings():
+    try:
+        import urllib3
+        warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+        urllib3.disable_warnings()
+    except ImportError:
+        pass
 
 from modules.banner import banner, get_banner_html
 from modules.dependencies import check_dependencies
@@ -14,13 +22,6 @@ from modules.config import save_config
 from modules.scanner import full_scan
 
 OUTPUT_DIR = "output"
-
-# Suppress unverified HTTPS warnings for a cleaner experience
-warnings.filterwarnings("ignore", message="Unverified HTTPS request")
-try:
-    urllib3.disable_warnings()
-except Exception:
-    pass
 
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
@@ -59,7 +60,6 @@ def main():
             selected_domains = [d for d in selected_domains if d not in scanned_domains]
             print(f"\033[1;36m[VENO] Resuming scan for remaining {len(selected_domains)} domains...\033[0m")
         else:
-            # Clear the scanned_domains.txt if starting fresh
             open(f"{OUTPUT_DIR}/scanned_domains.txt", "w").close()
             open(f"{OUTPUT_DIR}/scanned_ips.txt", "w").close()
 
@@ -95,11 +95,11 @@ def main():
                 full_scan(domain, config)
                 with open(f"{OUTPUT_DIR}/scanned_domains.txt", "a") as f:
                     f.write(domain + "\n")
-            except Exception as e:
+            except Exception:
                 print(f"\033[1;31m[!] Scan failed for {domain}. See {OUTPUT_DIR}/{domain}/errors.log for details.\033[0m")
 
         print(f"\n\033[1;32m[\u2713] Scan completed. Check {OUTPUT_DIR} for results.\033[0m")
-    except Exception as e:
+    except Exception:
         print(f"\033[1;31m[!] Script terminated unexpectedly. Check error logs in output directory.\033[0m")
         with open(f"{OUTPUT_DIR}/error.log", "a") as f:
             f.write(traceback.format_exc())
