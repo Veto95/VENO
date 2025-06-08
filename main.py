@@ -45,7 +45,6 @@ def main():
         open(f"{OUTPUT_DIR}/scanned_domains.txt", "a").close()
         open(f"{OUTPUT_DIR}/scanned_ips.txt", "a").close()
 
-        # Scan each domain
         for domain in selected_domains:
             try:
                 scan_domain(
@@ -59,10 +58,9 @@ def main():
             except Exception as e:
                 print(f"[!] Scan failed for {domain}. See {OUTPUT_DIR}/{domain}/errors.log for details.")
 
-        print(f"[✓] Scan completed. Check {OUTPUT_DIR} for results.")
-
+        print(f"\033[1;32m[\u2713] Scan completed. Check {OUTPUT_DIR} for results.\033[0m")
     except Exception as e:
-        print(f"[!] Script terminated unexpectedly. Check error logs in output directory.")
+        print(f"\033[1;31m[!] Script terminated unexpectedly. Check error logs in output directory.\033[0m")
         with open(f"{OUTPUT_DIR}/error.log", "a") as f:
             f.write(traceback.format_exc())
         sys.exit(1)
