@@ -1,52 +1,95 @@
-def get_scan_intensity(outdir):
-    """
-    Prompt user for scan intensity with input validation and return config dict.
-    """
-    print("Select scan intensity:")
-    print("  1) Fast (minimal probes, less detail)")
-    print("  2) Normal (recommended for most cases)")
-    print("  3) Deep (thorough, slow, exhaustive, with WAF evasion)")
-    while True:
-        choice = input("> ").strip()
-        if choice == "1":
-            intensity = "fast"
-            break
-        elif choice == "2":
-            intensity = "normal"
-            break
-        elif choice == "3":
-            intensity = "deep"
-            break
-        else:
-            print("\033[1;31m[!] Invalid choice. Enter 1, 2, or 3.\033[0m")
+import os
 
-    configs = {
-        "fast":   {"intensity": "fast", "threads": 5, "hak_depth": 1, "sqlmap_flags": "", "recursion_depth": 1, "waf_evasion": False},
-        "normal": {"intensity": "normal", "threads": 10, "hak_depth": 2, "sqlmap_flags": "--risk=1 --level=1 --random-agent", "recursion_depth": 2, "waf_evasion": False},
-        "deep":   {"intensity": "deep", "threads": 20, "hak_depth": 3, "sqlmap_flags": "--risk=3 --level=5 --random-agent --tamper=between,randomcase,space2comment", "recursion_depth": 3, "waf_evasion": True},
+DEFAULT_OUTPUT_DIR = "output"
+DEFAULT_BANNER_HTML = "<h1>VENO Automated Bug Bounty Scan</h1>"
+
+SCAN_INTENSITIES = {
+    "low": {
+        "wordlist": "/usr/share/seclists/Discovery/Web-Content/quickhits.txt",
+        "threads": 5,
+        "run_subjack": False,
+        "run_sqlmap": False,
+        "run_waymore": False,
+        "run_hakrawler": False,
+        "run_nuclei_full": False,
+        "dir_fuzz_tool": "ffuf",
+        "gau": False,
+        "dalfox": False,
+        "xsstrike": False,
+    },
+    "medium": {
+        "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt",
+        "threads": 10,
+        "run_subjack": True,
+        "run_sqlmap": True,
+        "run_waymore": True,
+        "run_hakrawler": True,
+        "run_nuclei_full": False,
+        "dir_fuzz_tool": "ffuf",
+        "gau": True,
+        "dalfox": True,
+        "xsstrike": False,
+    },
+    "high": {
+        "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt",
+        "threads": 40,
+        "run_subjack": True,
+        "run_sqlmap": True,
+        "run_waymore": True,
+        "run_hakrawler": True,
+        "run_nuclei_full": True,
+        "dir_fuzz_tool": "ffuf",
+        "gau": True,
+        "dalfox": True,
+        "xsstrike": True,
+    },
+    "max": {
+        "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt",
+        "threads": 100,
+        "run_subjack": True,
+        "run_sqlmap": True,
+        "run_waymore": True,
+        "run_hakrawler": True,
+        "run_nuclei_full": True,
+        "dir_fuzz_tool": "dirsearch",
+        "gau": True,
+        "dalfox": True,
+        "xsstrike": True,
     }
-    return configs[intensity]
+}
 
-def suggest_tools(scan_config, subdomain_scan):
+def get_config(
+    domain,
+    output_dir=DEFAULT_OUTPUT_DIR,
+    scan_intensity="medium",
+    banner_html=DEFAULT_BANNER_HTML
+):
     """
-    Suggest tools based on scan intensity and subdomain scan selection.
-    theHarvester and subfinder are always included.
+    Returns a config dict compatible with scanner_steps.py and context passing.
     """
-    base = ["theHarvester", "subfinder"]
-    intensity = scan_config["intensity"]
-    if intensity == "fast":
-        base += ["httprobe", "waybackurls"]
-    elif intensity == "deep":
-        base += [
-            "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
-            "arjun", "sqlmap", "ffuf", "dirsearch", "dalfox", "waymore", "uro", "XSStrike"
-        ]
-    else:  # normal
-        base += [
-            "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
-            "ffuf", "dirsearch", "dalfox"
-        ]
-    if not subdomain_scan:
-        base = [t for t in base if t not in ("subfinder", "subjack")]
-        # theHarvester remains always included
-    return base
+    intensity = SCAN_INTENSITIES.get(scan_intensity, SCAN_INTENSITIES["medium"])
+
+    config = {
+        "output_dir": output_dir,
+        "wordlist": intensity["wordlist"],
+        "scan_intensity": scan_intensity,
+        "scan_config": {
+            "threads": intensity["threads"],
+            "dir_fuzz_tool": intensity["dir_fuzz_tool"],
+            "run_subjack": intensity["run_subjack"],
+            "run_sqlmap": intensity["run_sqlmap"],
+            "run_waymore": intensity["run_waymore"],
+            "run_hakrawler": intensity["run_hakrawler"],
+            "run_nuclei_full": intensity["run_nuclei_full"],
+            "gau": intensity["gau"],
+            "dalfox": intensity["dalfox"],
+            "xsstrike": intensity["xsstrike"],
+        },
+        "banner_html": banner_html,
+        "domain": domain,
+    }
+    return config
+
+# Example usage in main.py or scanner.py:
+# from modules.config import get_config
+# config = get_config(domain="example.com", scan_intensity="high")
