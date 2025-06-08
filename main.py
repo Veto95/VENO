@@ -1,160 +1,147 @@
+import argparse
 import os
 import sys
+import logging
 import traceback
-import warnings
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-# Suppress unverified HTTPS warnings for a cleaner experience
-with warnings.catch_warnings():
-    try:
-        import urllib3
-        warnings.filterwarnings("ignore", message="Unverified HTTPS request")
-        urllib3.disable_warnings()
-    except ImportError:
-        pass
 
 from modules.banner import banner, get_banner_html
 from modules.dependencies import check_dependencies
-from modules.domain_input import get_domains
+from modules.domain_input import get_domains, load_domains
 from modules.scan_intensity import get_scan_intensity, suggest_tools
 from modules.subdomain_scan import get_subdomain_scan_choice
 from modules.wordlist import get_wordlist
 from modules.config import save_config
 from modules.scanner import full_scan
 
-# ---- CONSTANTS ----
 OUTPUT_DIR = "output"
 SCANNED_DOMAINS = "scanned_domains.txt"
-SCANNED_IPS = "scanned_ips.txt"
 ERROR_LOG = "error.log"
-MAX_THREADS = 5  # Tweak for your system!
 
-# ---- UTILS ----
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
+def setup_logging(output_dir):
+    log_path = os.path.join(output_dir, ERROR_LOG)
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    console.setFormatter(formatter)
+    logging.getLogger().addHandler(console)
 
-def get_scanned_domains():
-    scanned_path = os.path.join(OUTPUT_DIR, SCANNED_DOMAINS)
+def parse_args():
+    parser = argparse.ArgumentParser(description="VENO - Bug Bounty & Recon Tool")
+    parser.add_argument('--domains', help='Path to domain file or comma-separated list', required=False)
+    parser.add_argument('--wordlist', help='Path to wordlist', required=False)
+    parser.add_argument('--intensity', choices=['fast', 'normal', 'deep'], default='normal')
+    parser.add_argument('--output-dir', default=OUTPUT_DIR)
+    parser.add_argument('--subdomains', action='store_true', help='Enable subdomain scan')
+    parser.add_argument('--resume', action='store_true', help='Resume last scan')
+    parser.add_argument('--max-threads', type=int, default=5)
+    return parser.parse_args()
+
+def read_domains(domains_arg, outdir):
+    if not domains_arg:
+        return get_domains(outdir)
+    if os.path.isfile(domains_arg):
+        return load_domains(domains_arg, outdir)
+    # comma or space separated
+    domain_list = [d.strip() for d in domains_arg.replace(',', ' ').split() if d.strip()]
+    if not domain_list:
+        raise ValueError("No valid domains provided.")
+    return domain_list
+
+def get_scanned_domains(output_dir):
+    scanned_path = os.path.join(output_dir, SCANNED_DOMAINS)
     if os.path.exists(scanned_path):
         with open(scanned_path, "r") as f:
             return set(line.strip() for line in f if line.strip())
     return set()
 
-def log_error(message, domain=None):
-    """Log error globally or per-domain."""
+def log_error(message, domain=None, output_dir=OUTPUT_DIR):
     if domain:
-        dir_path = os.path.join(OUTPUT_DIR, domain)
+        dir_path = os.path.join(output_dir, domain)
         os.makedirs(dir_path, exist_ok=True)
         err_path = os.path.join(dir_path, "errors.log")
     else:
-        err_path = os.path.join(OUTPUT_DIR, ERROR_LOG)
+        err_path = os.path.join(output_dir, ERROR_LOG)
     with open(err_path, "a") as f:
         f.write(message + "\n")
+    logging.error(message)
 
-def prompt_resume():
-    while True:
-        resp = input("Do you want to resume the last scan? [Y/n]: ").strip().lower()
-        if resp in ("", "y", "yes"):
-            return True
-        elif resp in ("n", "no"):
-            return False
-        else:
-            print("Invalid input. Please enter Y or N.")
-
-def print_status(msg):
-    print(f"\033[1;36m[VENO]\033[0m {msg}")
-
-def print_success(msg):
-    print(f"\033[1;32m[\u2713]\033[0m {msg}")
-
-def print_error(msg):
-    print(f"\033[1;31m[!]\033[0m {msg}")
-
-# ---- MAIN SCAN FUNCTION ----
-def scan_domain(domain, config, lock):
-    """Scan a single domain and log progress/errors."""
+def scan_domain(domain, config, lock, output_dir):
     try:
-        print_status(f"Scanning: {domain}")
+        logging.info(f"Scanning: {domain}")
         full_scan(domain, config)
         with lock:
-            with open(os.path.join(OUTPUT_DIR, SCANNED_DOMAINS), "a") as f:
+            with open(os.path.join(output_dir, SCANNED_DOMAINS), "a") as f:
                 f.write(domain + "\n")
-    except Exception:
-        print_error(f"Scan failed for {domain}. See output/{domain}/errors.log for details.")
-        log_error(traceback.format_exc(), domain=domain)
+    except Exception as e:
+        logging.error(f"Scan failed for {domain}.")
+        traceback_str = traceback.format_exc()
+        log_error(traceback_str, domain=domain, output_dir=output_dir)
 
-# ---- MAIN ENTRY ----
 def main():
+    args = parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
+    setup_logging(args.output_dir)
+    banner()
+    logging.info(f"OUTPUT DIRECTORY: {args.output_dir}")
+
+    check_dependencies(args.output_dir)
+
     try:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        clear_screen()
-        banner()
-        print_status(f"OUTPUT DIRECTORY: \033[1;33m{OUTPUT_DIR}\033[0m")
-        check_dependencies(OUTPUT_DIR)
-
-        scanned_domains = get_scanned_domains()
-        resume = False
-
-        if scanned_domains:
-            print_status("Existing scan detected.")
-            resume = prompt_resume()
-
-        print_status("DOMAIN INPUT")
-        selected_domains = get_domains(OUTPUT_DIR)
-
-        if resume:
-            selected_domains = [d for d in selected_domains if d not in scanned_domains]
-            if not selected_domains:
-                print_success("All domains already scanned! Exiting.")
-                return
-            print_status(f"Resuming scan for remaining {len(selected_domains)} domains...")
-        else:
-            for fname in (SCANNED_DOMAINS, SCANNED_IPS):
-                open(os.path.join(OUTPUT_DIR, fname), "w").close()
-
-        print_status("SCAN INTENSITY")
-        scan_config = get_scan_intensity(OUTPUT_DIR)
-
-        print_status("SUBDOMAIN SCAN")
-        subdomain_scan = get_subdomain_scan_choice(OUTPUT_DIR)
-
-        print_status("WORDLIST SELECTION")
-        wordlist = get_wordlist(OUTPUT_DIR)
-
-        selected_tools = suggest_tools(scan_config, subdomain_scan)
-        print_status(f"TOOL SELECTION (auto): \033[1;32m{', '.join(selected_tools)}\033[0m")
-
-        config = {
-            "output_dir": OUTPUT_DIR,
-            "selected_tools": selected_tools,
-            "wordlist": wordlist,
-            "scan_config": scan_config,
-            "recursion_depth": scan_config.get("recursion_depth"),
-            "subdomain_scan": subdomain_scan,
-            "banner_html": get_banner_html()
-        }
-        save_config(OUTPUT_DIR, selected_tools, wordlist, scan_config, scan_config.get("recursion_depth"), subdomain_scan)
-
-        for fname in (SCANNED_DOMAINS, SCANNED_IPS):
-            open(os.path.join(OUTPUT_DIR, fname), "a").close()
-
-        # ---- PARALLEL SCANNING ----
-        if selected_domains:
-            print_status(f"Starting scan for {len(selected_domains)} domains using {MAX_THREADS} threads.")
-            lock = threading.Lock()
-            with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-                futures = [executor.submit(scan_domain, domain, config, lock) for domain in selected_domains]
-                for future in as_completed(futures):
-                    pass  # All output/logging handled in scan_domain
-            print_success(f"Scan completed. Check {OUTPUT_DIR} for results.")
-        else:
-            print_status("No domains left to scan.")
-
-    except Exception:
-        print_error("Script terminated unexpectedly. Check error logs in output directory.")
-        log_error(traceback.format_exc())
+        domains = read_domains(args.domains, args.output_dir)
+    except Exception as e:
+        logging.error(f"Failed to read domains: {e}")
         sys.exit(1)
+
+    if not args.wordlist:
+        wordlist = get_wordlist(args.output_dir)
+    else:
+        wordlist = args.wordlist
+        if not os.path.isfile(wordlist):
+            logging.error(f"Wordlist not found: {wordlist}")
+            sys.exit(1)
+
+    scan_config = {
+        "intensity": args.intensity,
+        "threads": args.max_threads,
+        "sqlmap_flags": "",
+    }
+
+    selected_tools = suggest_tools(args.intensity)
+    banner_html = get_banner_html()
+
+    config = {
+        "output_dir": args.output_dir,
+        "scan_config": scan_config,
+        "wordlist": wordlist,
+        "selected_tools": selected_tools,
+        "banner_html": banner_html,
+        "subdomains": args.subdomains,
+    }
+
+    from threading import Lock
+    lock = Lock()
+    scanned_domains = get_scanned_domains(args.output_dir)
+
+    domains_to_scan = []
+    if args.resume:
+        domains_to_scan = [d for d in domains if d not in scanned_domains]
+    else:
+        domains_to_scan = domains
+
+    if not domains_to_scan:
+        logging.info("No new domains to scan.")
+        sys.exit(0)
+
+    with ThreadPoolExecutor(max_workers=args.max_threads) as executor:
+        futures = [executor.submit(scan_domain, domain, config, lock, args.output_dir) for domain in domains_to_scan]
+        for future in as_completed(futures):
+            pass  # All logging handled internally
 
 if __name__ == "__main__":
     main()
