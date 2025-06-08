@@ -1,22 +1,28 @@
 import sys
 import logging
-from modules.banner import banner
+from modules.banner import BANNER  # OR: from modules.banner import banner
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 
-print(banner)
+def print_banner():
+    try:
+        print(BANNER)
+    except NameError:
+        # fallback if it's a function, call it
+        from modules.banner import banner
+        print(banner())
 
 def print_help():
-    print("""
-VENO Automated Recon Shell Commands:
-    show options        Show current settings
-    set <option> <val> Set an option (domain, output, threads, wordlist, banner_html, subdomains, intensity)
-    run                Start the scan
-    help               Show this help message
-    exit, quit         Exit the shell
-
-Scan intensities (affect wordlist/tools/threads): low, medium, high
-""")
+    print("\n\033[1;35mVENO Automated Recon Shell Commands:\033[0m")
+    print("  \033[1;36mshow options\033[0m        Show current settings")
+    print("  \033[1;36mset <option> <val>\033[0m  Set an option (domain, output, threads, wordlist, banner_html, subdomains, intensity)")
+    print("  \033[1;36mrun\033[0m                Start the scan")
+    print("  \033[1;36mhelp\033[0m               Show this help message")
+    print("  \033[1;36mexit, quit\033[0m         Exit the shell\n")
+    print("  \033[1;35mAvailable scan intensities:\033[0m\n")
+    for key, profile in SCAN_INTENSITIES.items():
+        print(f"    \033[1;33m{key}\033[0m: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}, extended scan={'yes' if profile.get('run_nuclei_full') else 'no'}")
+    print("\n  \033[1;35mExample:\033[0m set intensity normal\n")
 
 def show_options(config):
     print("\nCurrent VENO options:")
@@ -36,26 +42,29 @@ def merge_intensity(config, intensity):
     config["intensity"] = intensity
     config["wordlist"] = profile["wordlist"]
     config["scan_config"]["threads"] = profile["threads"]
-    # Set per-tool booleans
+    # Set per-tool booleans and additional config
     for key in profile:
         if key in ("wordlist", "threads"):
             continue
         config["scan_config"][key] = profile[key]
 
 def main():
-    # Default config
+    print_banner()  # Always print the banner at startup
+
+    # Default config — must match available intensities!
+    default_intensity = "normal"  # or "fast" or "deep" as you like
     config = {
         "domain": "",
         "output_dir": "output",
         "subdomains": True,
         "banner_html": "",
-        "intensity": "medium",
+        "intensity": default_intensity,
         "scan_config": {
             "threads": 10,
         },
         "wordlist": "",
     }
-    merge_intensity(config, "medium")
+    merge_intensity(config, default_intensity)  # ensures config matches intensity
 
     print_help()
 
@@ -120,7 +129,7 @@ def main():
                     level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s"
                 )
-                print(f"\033[1;35m[VENO]\033[0m Starting full scan for \033[1;36m{domain}\033[0m")
+                print(f"\033[1;35m[VENO]\033[0m Starting full scan for \033[1;36m{domain}\033[0m (intensity: {config['intensity']})")
                 full_scan(domain, config)
                 print(f"\033[1;32m[VENO]\033[0m Scan completed for \033[1;36m{domain}\033[0m")
                 print(f"Report: {config['output_dir']}/{domain}/report.html")
