@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 import sys
-from modules.banner import print_banner
+from modules.banner import banner
 from modules.domain_input import get_domains
 from modules.config import get_config
 from scanner import full_scan
