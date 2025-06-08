@@ -12,3 +12,10 @@ def save_config(outdir, selected_tools, wordlist, scan_config, recursion_depth, 
     config_path = os.path.join(outdir, "config.json")
     with open(config_path, "w") as f:
         json.dump(config, f, indent=4)
+
+def load_config(outdir):
+    config_path = os.path.join(outdir, "config.json")
+    if not os.path.exists(config_path):
+        return {}
+    with open(config_path, "r") as f:
+        return json.load(f)
