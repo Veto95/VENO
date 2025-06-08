@@ -1,41 +1,83 @@
 import argparse
 import logging
+import os
+import sys
+from modules.banner import print_banner
+from modules.domain_input import get_domains
+from modules.config import get_config
+from scanner import full_scan
 
-from modules.banner import banner, get_banner_html
-from modules.domain_input import get_domains_interactive
-from modules.scan_intensity import get_scan_intensity, suggest_tools
-from modules.subdomain_scan import get_subdomain_scan_choice
-from modules.wordlist import get_wordlist
-from modules.config import save_config, load_config
-from modules.scanner import full_scan
+try:
+    from rich.console import Console
+    console = Console()
+except ImportError:
+    console = None
+
+def color(text, clr):
+    codes = {"green": "1;32", "red": "1;31", "yellow": "1;33", "cyan": "1;36", "magenta": "1;35", "bold": "1"}
+    return f"\033[{codes.get(clr, '0')}m{text}\033[0m"
+
+def clear_screen():
+    # Cross-platform screen clear
+    if os.name == 'nt':
+        os.system('cls')
+    else:
+        os.system('clear')
 
 def main():
-    banner()
-    parser = argparse.ArgumentParser(description="VENO - Bug Bounty & Recon Tool")
-    parser.add_argument("-o", "--output", default="output", help="Output directory")
+    print_banner(console=console, plain_fallback=color)
+
+    parser = argparse.ArgumentParser(description="VENO Automated Bug Bounty Scanner [DEUS ACTIVE MODE]")
+    parser.add_argument("--intensity", choices=["low", "medium", "high", "max"], default="medium", help="Scan intensity")
+    parser.add_argument("--output", default="output", help="Output directory")
+    parser.add_argument("--domains", help="Comma/space separated domains or path to file (overrides interactive prompt)")
     args = parser.parse_args()
 
-    outdir = args.output
-    domains = get_domains_interactive(outdir)
-    scan_config = get_scan_intensity(outdir)
-    subdomain_scan = get_subdomain_scan_choice(outdir)
-    wordlist = get_wordlist(outdir)
-    banner_html = get_banner_html()
+    outdir = args.output.strip()
+    scan_intensity = args.intensity
 
-    selected_tools = suggest_tools(scan_config, subdomain_scan)
+    # Get domains (from env, CLI, file, or interactive)
+    if args.domains:
+        path = args.domains.strip()
+        if os.path.isfile(path):
+            domains = get_domains(outdir)
+        else:
+            domains = [d.strip() for d in path.replace(',', ' ').split() if d.strip()]
+    else:
+        domains = get_domains(outdir)
 
-    save_config(outdir, selected_tools, wordlist, scan_config, scan_config.get("recursion_depth", 1), subdomain_scan)
+    if not domains:
+        msg = "[VENO] No valid domains supplied. Exiting."
+        if console:
+            console.print(f"[bold red]{msg}[/bold red]")
+        else:
+            print(color(msg, "red"))
+        return
 
+    configs = []
     for domain in domains:
-        config = {
-            "output_dir": outdir,
-            "scan_config": scan_config,
-            "subdomains": subdomain_scan,
-            "banner_html": banner_html,
-            "wordlist": wordlist,
-            "selected_tools": selected_tools
-        }
-        full_scan(domain, config)
+        config = get_config(domain=domain, output_dir=outdir, scan_intensity=scan_intensity)
+        configs.append((domain, config))
+
+    # Clear screen and show only the banner before scanning
+    clear_screen()
+    print_banner(console=console, plain_fallback=color)
+
+    for domain, config in configs:
+        domain_dir = os.path.join(outdir, domain)
+        os.makedirs(domain_dir, exist_ok=True)
+        logging.basicConfig(
+            filename=os.path.join(domain_dir, "veno.log"),
+            filemode="w",
+            format="%(asctime)s %(levelname)s %(message)s",
+            level=logging.INFO
+        )
+        results = full_scan(domain, config)
+        msg = f"[VENO] Scan complete for {domain}! See {outdir}/{domain}/report.html"
+        if console:
+            console.print(f"[bold green]{msg}[/bold green]")
+        else:
+            print(color(msg, "green"))
 
 if __name__ == "__main__":
     main()
