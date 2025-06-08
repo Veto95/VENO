@@ -38,7 +38,6 @@ def main():
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         banner()
         print(f"\n\033[1;36m[VENO] OUTPUT DIRECTORY:\033[0m \033[1;33m{OUTPUT_DIR}\033[0m")
-        print("\n\033[1;36m[VENO] DEPENDENCY CHECK\033[0m")
         check_dependencies(OUTPUT_DIR)
 
         clear_screen()
@@ -89,17 +88,20 @@ def main():
         }
         save_config(OUTPUT_DIR, selected_tools, wordlist, scan_config, scan_config.get("recursion_depth"), subdomain_scan)
 
+        open(f"{OUTPUT_DIR}/scanned_domains.txt", "a").close()
+        open(f"{OUTPUT_DIR}/scanned_ips.txt", "a").close()
+
         for i, domain in enumerate(selected_domains, 1):
             print(f"\n\033[1;33m[VENO] Scanning {i}/{len(selected_domains)}: {domain}\033[0m")
             try:
                 full_scan(domain, config)
                 with open(f"{OUTPUT_DIR}/scanned_domains.txt", "a") as f:
                     f.write(domain + "\n")
-            except Exception:
+            except Exception as e:
                 print(f"\033[1;31m[!] Scan failed for {domain}. See {OUTPUT_DIR}/{domain}/errors.log for details.\033[0m")
 
         print(f"\n\033[1;32m[\u2713] Scan completed. Check {OUTPUT_DIR} for results.\033[0m")
-    except Exception:
+    except Exception as e:
         print(f"\033[1;31m[!] Script terminated unexpectedly. Check error logs in output directory.\033[0m")
         with open(f"{OUTPUT_DIR}/error.log", "a") as f:
             f.write(traceback.format_exc())
