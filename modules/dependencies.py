@@ -1,7 +1,11 @@
 import shutil
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
+# ---- CONSTANTS ----
 TOOL_INSTALL_CMDS = {
     "theHarvester": "sudo apt install -y theharvester",
     "subfinder": "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
@@ -29,34 +33,84 @@ TOOL_INSTALL_CMDS = {
     "dig": "sudo apt install -y dnsutils",
     "fzf": "sudo apt install -y fzf",
 }
-
 REQUIRED_TOOLS = list(TOOL_INSTALL_CMDS.keys())
+ERROR_LOG = "dependency_error.log"
+MAX_THREADS = 8
 
-def check_and_prompt_install():
+def log_error(message, output_dir=None):
+    """Log installation errors to a file."""
+    log_dir = output_dir if output_dir else "."
+    err_path = os.path.join(log_dir, ERROR_LOG)
+    with open(err_path, "a") as f:
+        f.write(message + "\n")
+
+def print_status(msg):
+    print(f"\033[1;36m[VENO]\033[0m {msg}")
+
+def print_success(msg):
+    print(f"\033[1;32m[\u2713]\033[0m {msg}")
+
+def print_error(msg):
+    print(f"\033[1;31m[!]\033[0m {msg}")
+
+def check_tool(tool):
+    """Check if a tool is available in PATH."""
+    return tool if shutil.which(tool) is None else None
+
+def check_missing_tools_parallel():
+    """Check all required tools in parallel. Returns list of missing."""
     missing = []
-    for tool in REQUIRED_TOOLS:
-        if shutil.which(tool) is None:
-            missing.append(tool)
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+        futures = {executor.submit(check_tool, tool): tool for tool in REQUIRED_TOOLS}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                missing.append(result)
+    return missing
+
+def install_tool(tool, output_dir=None):
+    """Try to install a tool, log errors if it fails."""
+    print_status(f"Installing {tool} ...")
+    try:
+        subprocess.run(TOOL_INSTALL_CMDS[tool], shell=True, check=True)
+        print_success(f"{tool} installed.")
+    except Exception as e:
+        msg = f"Failed to install {tool}: {e}"
+        print_error(msg)
+        if output_dir:
+            log_error(msg, output_dir)
+        raise
+
+def check_and_prompt_install(output_dir=None):
+    """
+    Check all required tools. If missing, prompt user for mass install.
+    Fails gracefully and logs to output if install fails.
+    """
+    missing = check_missing_tools_parallel()
     if not missing:
-        print("\033[1;32m[✓] All required tools are installed.\033[0m")
+        print_success("All required tools are installed.")
         return True
-    else:
-        print("\033[1;31m[!] Missing required tools:\033[0m", ", ".join(missing))
-        for tool in missing:
-            install = input(f"\033[1;33mTool '{tool}' is missing. Would you like to install it now? (yes/no):\033[0m ").strip().lower()
-            if install in ["yes", "y"]:
-                print(f"\033[1;36m[VENO] Installing {tool} ...\033[0m")
-                try:
-                    subprocess.run(TOOL_INSTALL_CMDS[tool], shell=True, check=True)
-                except Exception as e:
-                    print(f"\033[1;31m[!] Failed to install {tool}: {e}\033[0m")
-                    print("\033[1;31m[!] Exiting.\033[0m")
-                    sys.exit(1)
-            else:
-                print(f"\033[1;31m[!] {tool} is required. Exiting.\033[0m")
-                sys.exit(1)
-        print("\033[1;32m[✓] All required tools are now installed.\033[0m")
-        return True
+
+    print_error(f"Missing required tools: {', '.join(missing)}")
+    install_all = input(f"\033[1;33mInstall ALL missing tools automatically? (Y/n):\033[0m ").strip().lower()
+    if install_all not in ["", "y", "yes"]:
+        print_error("Required tools missing. Exiting.")
+        sys.exit(1)
+    failed = []
+    for tool in missing:
+        try:
+            install_tool(tool, output_dir)
+        except Exception:
+            failed.append(tool)
+    if failed:
+        print_error(f"Failed to install: {', '.join(failed)}. Exiting.")
+        sys.exit(1)
+    print_success("All required tools now installed.")
+    return True
 
 def check_dependencies(output_dir=None):
-    check_and_prompt_install()
+    """
+    Main entry: checks and installs dependencies as needed.
+    Intended to be called from main.py.
+    """
+    check_and_prompt_install(output_dir)
