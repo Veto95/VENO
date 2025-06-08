@@ -4,10 +4,9 @@ import traceback
 from modules.banner import banner
 from modules.dependencies import check_dependencies
 from modules.domain_input import get_domains
-from modules.scan_intensity import get_scan_intensity
+from modules.scan_intensity import get_scan_intensity, suggest_tools
 from modules.subdomain_scan import get_subdomain_scan_choice
 from modules.wordlist import get_wordlist
-from modules.tools import get_tool_selection
 from modules.config import save_config
 from modules.scanner import scan_domain
 
@@ -32,8 +31,10 @@ def main():
         print("\n[VENO] WORDLIST SELECTION")
         wordlist = get_wordlist(OUTPUT_DIR)
 
-        print("\n[VENO] TOOL SELECTION")
-        selected_tools = get_tool_selection(OUTPUT_DIR)
+        # Automatically select tools based on scan intensity
+        selected_tools = suggest_tools(scan_config)
+
+        print(f"\n[VENO] TOOL SELECTION (auto): {', '.join(selected_tools)}")
 
         # Save config
         save_config(
