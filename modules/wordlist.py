@@ -7,35 +7,43 @@ COMMON_WORDLISTS = {
     "Dirbuster: directory-list-2.3-small.txt": "/usr/share/dirbuster/wordlists/directory-list-2.3-small.txt"
 }
 
+def color(text, code):
+    """Return text wrapped in ANSI color codes."""
+    return f"\033[{code}m{text}\033[0m"
+
 def get_wordlist(output_dir):
     # Check environment variable for automation/headless mode
     env_wordlist = os.environ.get("VENO_WORDLIST")
     if env_wordlist and os.path.isfile(env_wordlist):
-        logging.info(f"Using wordlist from VENO_WORDLIST: {env_wordlist}")
+        logging.info(color(f"Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
+        print(color(f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
         return env_wordlist
 
     # List common wordlists for interactive selection
-    print("\n[VENO] Wordlist Selection")
-    print("Available wordlists:")
+    print(color("\n[VENO] Wordlist Selection", "1;36"))
+    print(color("Available wordlists:", "1;37"))
     for idx, (desc, path) in enumerate(COMMON_WORDLISTS.items(), 1):
-        print(f"  {idx}: {desc} ({path})")
-    print("  0: Enter custom path")
+        print(color(f"  {idx}: {desc} ({path})", "1;33"))
+    print(color("  0: Enter custom path", "1;35"))
     while True:
         try:
-            choice = int(input("Select wordlist [0/1/2/3]: "))
+            choice = input(color("Select wordlist [0/1/2/3]: ", "1;34"))
+            choice = int(choice)
             if choice == 0:
-                path = input("Enter full path to your wordlist: ").strip()
+                path = input(color("Enter full path to your wordlist: ", "1;35")).strip()
                 if os.path.isfile(path):
+                    print(color(f"[VENO] Using custom wordlist: {path}", "1;32"))
                     return path
                 else:
-                    print("[!] File not found. Try again.")
+                    print(color("[!] File not found. Try again.", "1;31"))
             elif 1 <= choice <= len(COMMON_WORDLISTS):
                 path = list(COMMON_WORDLISTS.values())[choice - 1]
                 if os.path.isfile(path):
+                    print(color(f"[VENO] Using wordlist: {path}", "1;32"))
                     return path
                 else:
-                    print(f"[!] Wordlist not found: {path}")
+                    print(color(f"[!] Wordlist not found: {path}", "1;31"))
             else:
-                print("[!] Invalid choice.")
+                print(color("[!] Invalid choice.", "1;31"))
         except ValueError:
-            print("[!] Please enter a number.")
+            print(color("[!] Please enter a number.", "1;31"))
