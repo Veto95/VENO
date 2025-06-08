@@ -188,7 +188,7 @@ def advanced_xss_vuln_hunting(domain, outdir):
     # XSStrike (XSS)
     try:
         subprocess.run([
-            "XSStrike", "-l", f"{outdir}/{domain}/paramspider.txt",
+            "xsstrike", "-l", f"{outdir}/{domain}/paramspider.txt",
             "-o", xsstrike_out
         ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
     except Exception as e:
