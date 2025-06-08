@@ -12,9 +12,8 @@ def timer_end(start, msg):
     elapsed = int(time.time() - start)
     logging.info(f"[VENO] {msg} completed in {elapsed}s")
 
-# --- Subdomain scanning (stub: implement as needed) ---
 def subdomain_scan(domain, outdir):
-     logging.info(f"[VENO] Starting subdomain scan for {domain}")
+    logging.info(f"[VENO] Starting subdomain scan for {domain}")
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
     subfinder_out = os.path.join(domain_dir, "subfinder.txt")
@@ -90,15 +89,12 @@ def subdomain_scan(domain, outdir):
             f.write(f"{s}\n")
     logging.info(f"[VENO] Found {len(live_subs)} live subdomains")
 
-    # 5. Scan each live subdomain (unleash recursive scan)
+    # 5. Scan each live subdomain (recursive scan, disables further subdomain recursion)
     for sub in sorted(live_subs):
         if sub == domain: continue  # Skip root domain, already scanned
         logging.info(f"[VENO] Launching scan for subdomain: {sub}")
         try:
-            # Import your main scan logic here.
-            # For example, if 'full_scan' is your top-level scan function:
             from modules.scanner import full_scan
-            # Build a config for subdomain scan (modify as needed)
             from copy import deepcopy
             sub_config = deepcopy({
                 "output_dir": outdir,
@@ -116,9 +112,6 @@ def subdomain_scan(domain, outdir):
 
     logging.info(f"[VENO] Subdomain scan completed for {domain}")
 
-    logging.info(f"Subdomain scan for {domain} (stubbed)")
-
-# --- Sensitive files/juicy info extraction ---
 def extract_sensitive_files(domain, outdir):
     start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
@@ -152,18 +145,15 @@ def extract_sensitive_files(domain, outdir):
     return live_sensitive
 
 def live_check(url, keywords=None):
-    # Simple live check: try curl and look for sensitive keywords in body
     try:
         r = subprocess.run(["curl", "-sL", "--max-time", "8", url], capture_output=True, check=True, timeout=10)
         body = r.stdout.decode(errors="ignore")
         has_sensitive = any(kw in body.lower() for kw in (keywords or []))
-        # Consider HTTP 200 and length > 0 as live
         is_live = bool(body)
         return is_live, has_sensitive
     except Exception:
         return False, False
 
-# --- Grep juicy info from URLs and JS files ---
 def grep_juicy_info(domain, outdir):
     start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
@@ -198,7 +188,6 @@ def grep_juicy_info(domain, outdir):
                         found = True
                         fout.write(f"[LIVE] {url}\n")
                         live_juicy.append(url)
-                # Live JS files
                 fin.seek(0)
                 js_urls = [line.strip() for line in fin if line.lower().strip().endswith(".js")]
                 for url in js_urls:
@@ -227,7 +216,6 @@ def grep_juicy_info(domain, outdir):
     timer_end(start, "Juicy info extraction")
     return live_juicy
 
-# --- Dynamic parameter discovery ---
 def discover_parameters(domain, outdir):
     logging.info(f"Discovering dynamic parameters for {domain}")
     start = timer_start()
@@ -235,7 +223,6 @@ def discover_parameters(domain, outdir):
     arjun_out = f"{outdir}/{domain}/arjun.txt"
     error_log = f"{outdir}/{domain}/errors.log"
     vulnerable_urls = []
-    # paramspider
     try:
         subprocess.run(
             ["paramspider", "-d", domain], 
@@ -248,7 +235,6 @@ def discover_parameters(domain, outdir):
             for line in f:
                 if "http" in line and "=" in line:
                     urls.append(line.strip())
-        # arjun
         with open("arjun_urls.txt", "w") as f:
             for url in urls:
                 f.write(url + "\n")
@@ -256,7 +242,6 @@ def discover_parameters(domain, outdir):
             ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out], 
             stderr=open(error_log, "a"), check=True, timeout=300
         )
-        # Collect possible vulnerable URLs for sqlmap
         with open(arjun_out) as f:
             for line in f:
                 if "GET" in line or "POST" in line:
@@ -270,7 +255,6 @@ def discover_parameters(domain, outdir):
     timer_end(start, "Dynamic parameter discovery")
     return vulnerable_urls
 
-# --- Advanced XSS/vuln hunting ---
 def advanced_xss_vuln_hunting(domain, outdir):
     logging.info(f"Running advanced XSS and vulnerability hunting for {domain}")
     start = timer_start()
@@ -278,7 +262,6 @@ def advanced_xss_vuln_hunting(domain, outdir):
     dalfox_out = f"{outdir}/{domain}/dalfox.txt"
     xsstrike_out = f"{outdir}/{domain}/xsstrike.txt"
     nuclei_out = f"{outdir}/{domain}/nuclei.txt"
-    # dalfox (XSS, with payloads)
     try:
         subprocess.run([
             "dalfox", "file", f"{outdir}/{domain}/paramspider.txt",
@@ -288,7 +271,6 @@ def advanced_xss_vuln_hunting(domain, outdir):
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"dalfox failed: {e}\n")
-    # XSStrike (XSS)
     try:
         subprocess.run([
             "xsstrike", "-l", f"{outdir}/{domain}/paramspider.txt",
@@ -297,7 +279,6 @@ def advanced_xss_vuln_hunting(domain, outdir):
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"XSStrike failed: {e}\n")
-    # nuclei (update, run)
     try:
         subprocess.run(["nuclei", "-update-templates"], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=120)
         subprocess.run([
@@ -308,7 +289,6 @@ def advanced_xss_vuln_hunting(domain, outdir):
             ferr.write(f"nuclei failed: {e}\n")
     timer_end(start, "Advanced XSS/vuln hunting")
 
-# --- SQL Injection Testing ---
 def sqlmap_on_vuln_urls(vuln_urls, outdir, domain):
     logging.info(f"Running sqlmap on discovered vulnerable URLs for {domain}")
     start = timer_start()
@@ -325,7 +305,6 @@ def sqlmap_on_vuln_urls(vuln_urls, outdir, domain):
                 ferr.write(f"sqlmap on {url} failed: {e}\n")
     timer_end(start, "Targeted SQL injection testing")
 
-# --- HTML Report Generation ---
 def generate_html_report(domain, outdir, banner_html):
     html_report = f"{outdir}/{domain}/report.html"
     toc = "<li>Results</li>"  # Stub - you can extend this!
