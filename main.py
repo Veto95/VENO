@@ -1,12 +1,16 @@
 import sys
 import logging
-from modules.banner import BANNER
+from modules.banner import banner  # Make sure BANNER is a string, not a function!
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
 def print_banner():
-    print(BANNER)
+    print(banner)
+
+def print_usage():
+    print("\033[1;35m[VENO]\033[0m Usage: set options, show options, run, help, exit")
+    print("Type '\033[1;36mhelp\033[0m' for full command details.\n")
 
 def print_help():
     print("\n\033[1;35mVENO Automated Recon Shell - Full Help\033[0m\n")
@@ -37,7 +41,9 @@ def print_help():
         if profile.get("dalfox"): features.append("xss")
         if profile.get("xsstrike"): features.append("xsstrike")
         if profile.get("run_sqlmap"): features.append("sqlmap")
-        print(f"    \033[1;33m{key}\033[0m: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}, {' | '.join(features)}")
+        features_str = " | ".join(features)
+        print(f"    \033[1;33m{key}\033[0m: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}" +
+              (", " + features_str if features_str else ""))
     print("\n  \033[1;35mExample Usage:\033[0m")
     print("      set domain example.com")
     print("      set intensity normal")
@@ -62,7 +68,6 @@ def merge_intensity(config, intensity):
     config["intensity"] = intensity
     config["wordlist"] = profile["wordlist"]
     config["scan_config"]["threads"] = profile["threads"]
-    # Set per-tool booleans and additional config
     for key in profile:
         if key in ("wordlist", "threads"):
             continue
@@ -72,11 +77,13 @@ def main():
     # Check dependencies before anything else!
     try:
         check_dependencies()
+        print("\033[1;32m[✓] All required tools are installed.\033[0m")
     except Exception as e:
         print(f"\033[1;31m[VENO]\033[0m Dependency check failed: {e}")
         sys.exit(3)
 
-    print_banner()  # Always print the banner at startup
+    print_banner()  # Print banner at startup
+    print_usage()   # Show a compact usage summary
 
     # Default config — must match available intensities!
     default_intensity = "normal"
@@ -90,9 +97,7 @@ def main():
         },
         "wordlist": "",
     }
-    merge_intensity(config, default_intensity)  # ensures config matches intensity
-
-    print_help()
+    merge_intensity(config, default_intensity)
 
     while True:
         try:
