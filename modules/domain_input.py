@@ -6,8 +6,8 @@ import sys
 MAX_DOMAINS = 100
 ERROR_LOG = "error.log"
 
-# Only use color in interactive terminals
 def supports_color():
+    """Detect if the running terminal supports color output."""
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 CYAN = "\033[1;36m" if supports_color() else ""
@@ -30,6 +30,7 @@ def clean_domain(dom):
 def log_error(message, outdir):
     """Log an error message to the output directory."""
     err_path = os.path.join(outdir, ERROR_LOG)
+    os.makedirs(outdir, exist_ok=True)
     with open(err_path, "a") as f:
         f.write(message + "\n")
     logging.error(message)
