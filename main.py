@@ -98,11 +98,13 @@ def main():
         logging.error(f"Failed to read domains: {e}")
         sys.exit(1)
 
+    # ---- WORDLIST SELECTION: THIS IS WHERE THE CYBERPUNK MAGIC HAPPENS ----
     if not args.wordlist:
         wordlist = get_wordlist(args.output_dir)
     else:
         wordlist = args.wordlist
         if not os.path.isfile(wordlist):
+            print("\033[1;31m[!] Wordlist not found: {}\033[0m".format(wordlist))
             logging.error(f"Wordlist not found: {wordlist}")
             sys.exit(1)
 
@@ -128,13 +130,13 @@ def main():
     lock = Lock()
     scanned_domains = get_scanned_domains(args.output_dir)
 
-    domains_to_scan = []
     if args.resume:
         domains_to_scan = [d for d in domains if d not in scanned_domains]
     else:
         domains_to_scan = domains
 
     if not domains_to_scan:
+        print("\033[1;33m[!] No new domains to scan.\033[0m")
         logging.info("No new domains to scan.")
         sys.exit(0)
 
