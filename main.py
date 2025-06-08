@@ -1,28 +1,48 @@
 import sys
 import logging
-from modules.banner import BANNER  # OR: from modules.banner import banner
+from modules.banner import BANNER
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
+from modules.dependencies import check_dependencies
 
 def print_banner():
-    try:
-        print(BANNER)
-    except NameError:
-        # fallback if it's a function, call it
-        from modules.banner import banner
-        print(banner())
+    print(BANNER)
 
 def print_help():
-    print("\n\033[1;35mVENO Automated Recon Shell Commands:\033[0m")
-    print("  \033[1;36mshow options\033[0m        Show current settings")
-    print("  \033[1;36mset <option> <val>\033[0m  Set an option (domain, output, threads, wordlist, banner_html, subdomains, intensity)")
-    print("  \033[1;36mrun\033[0m                Start the scan")
-    print("  \033[1;36mhelp\033[0m               Show this help message")
-    print("  \033[1;36mexit, quit\033[0m         Exit the shell\n")
-    print("  \033[1;35mAvailable scan intensities:\033[0m\n")
+    print("\n\033[1;35mVENO Automated Recon Shell - Full Help\033[0m\n")
+    print("  \033[1;36mshow options\033[0m")
+    print("      Prints all current settings and scan parameters.")
+    print("  \033[1;36mset <option> <value>\033[0m")
+    print("      Set a scan option. Options include:")
+    print("        \033[1;33mdomain\033[0m       - Target domain to scan (e.g. set domain example.com)")
+    print("        \033[1;33moutput\033[0m       - Output directory for results (default: output)")
+    print("        \033[1;33mthreads\033[0m      - Number of threads/tools to use (e.g. set threads 10)")
+    print("        \033[1;33mwordlist\033[0m     - Custom wordlist path for fuzzing/discovery")
+    print("        \033[1;33msubscan\033[0m      - true/false to enable/disable subdomain scan")
+    print("        \033[1;33mintensity\033[0m    - Scan profile (see below)")
+    print("      Example: set domain example.com")
+    print("      Example: set intensity deep")
+    print("      Example: set threads 50\n")
+    print("  \033[1;36mrun\033[0m")
+    print("      Launches the full scan with the current config. Results and report will be saved to your output directory.")
+    print("  \033[1;36mhelp\033[0m")
+    print("      Show this help message at any time.")
+    print("  \033[1;36mexit, quit\033[0m")
+    print("      Leave the shell.\n")
+
+    print("  \033[1;35mScan Intensities (affect wordlist, tools, threads):\033[0m\n")
     for key, profile in SCAN_INTENSITIES.items():
-        print(f"    \033[1;33m{key}\033[0m: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}, extended scan={'yes' if profile.get('run_nuclei_full') else 'no'}")
-    print("\n  \033[1;35mExample:\033[0m set intensity normal\n")
+        features = []
+        if profile.get("run_nuclei_full"): features.append("extended nuclei")
+        if profile.get("dalfox"): features.append("xss")
+        if profile.get("xsstrike"): features.append("xsstrike")
+        if profile.get("run_sqlmap"): features.append("sqlmap")
+        print(f"    \033[1;33m{key}\033[0m: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}, {' | '.join(features)}")
+    print("\n  \033[1;35mExample Usage:\033[0m")
+    print("      set domain example.com")
+    print("      set intensity normal")
+    print("      set threads 20")
+    print("      run\n")
 
 def show_options(config):
     print("\nCurrent VENO options:")
@@ -49,15 +69,21 @@ def merge_intensity(config, intensity):
         config["scan_config"][key] = profile[key]
 
 def main():
+    # Check dependencies before anything else!
+    try:
+        check_dependencies()
+    except Exception as e:
+        print(f"\033[1;31m[VENO]\033[0m Dependency check failed: {e}")
+        sys.exit(3)
+
     print_banner()  # Always print the banner at startup
 
     # Default config — must match available intensities!
-    default_intensity = "normal"  # or "fast" or "deep" as you like
+    default_intensity = "normal"
     config = {
         "domain": "",
         "output_dir": "output",
-        "subdomains": True,
-        "banner_html": "",
+        "subscan": True,
         "intensity": default_intensity,
         "scan_config": {
             "threads": 10,
@@ -95,7 +121,6 @@ def main():
                 continue
             option = parts[1]
             value = " ".join(parts[2:])
-            # Handle nested options & intensity
             if option == "threads":
                 try:
                     config["scan_config"]["threads"] = int(value)
@@ -105,12 +130,10 @@ def main():
                 config["output_dir"] = value
             elif option == "wordlist":
                 config["wordlist"] = value
-            elif option == "banner_html":
-                config["banner_html"] = value
             elif option == "domain":
                 config["domain"] = value
-            elif option == "subdomains":
-                config["subdomains"] = value.lower() in ("yes", "true", "1", "on")
+            elif option == "subscan":
+                config["subscan"] = value.lower() in ("yes", "true", "1", "on")
             elif option == "intensity":
                 merge_intensity(config, value)
             else:
