@@ -30,20 +30,23 @@ def get_scan_intensity(outdir):
 def suggest_tools(scan_config, subdomain_scan):
     """
     Suggest tools based on scan intensity and subdomain scan selection.
+    theHarvester and subfinder are always included.
     """
-    base = []
-    if scan_config["intensity"] == "fast":
-        base = ["subfinder", "httprobe", "waybackurls"]
-    elif scan_config["intensity"] == "deep":
-        base = [
-            "subfinder", "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
+    base = ["theHarvester", "subfinder"]
+    intensity = scan_config["intensity"]
+    if intensity == "fast":
+        base += ["httprobe", "waybackurls"]
+    elif intensity == "deep":
+        base += [
+            "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
             "arjun", "sqlmap", "ffuf", "dirsearch", "dalfox", "waymore", "uro", "XSStrike"
         ]
     else:  # normal
-        base = [
-            "subfinder", "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
+        base += [
+            "subjack", "waybackurls", "gau", "hakrawler", "nuclei", "paramspider",
             "ffuf", "dirsearch", "dalfox"
         ]
     if not subdomain_scan:
         base = [t for t in base if t not in ("subfinder", "subjack")]
+        # theHarvester remains always included
     return base
