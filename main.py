@@ -1,14 +1,14 @@
 import sys
 import logging
 import subprocess
-from modules.banner import BANNER  # If a function, call as BANNER(), else print(BANNER)
+from modules.banner import banner # If a function, call as BANNER(), else print(BANNER)
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
 def print_banner():
     # Handles if BANNER is a string or a function
-    print(BANNER() if callable(BANNER) else BANNER)
+    print(banner() if callable(banner) else banner)
 
 def print_usage():
     print("\033[1;35m[VENO]\033[0m Usage: set options, show options, run, help, update, exit")
@@ -83,7 +83,6 @@ def main():
     # Dependency check ONCE, only print if fails or successful
     try:
         check_dependencies()
-        print("\033[1;32m[✓] All required tools are installed.\033[0m")
     except Exception as e:
         print(f"\033[1;31m[VENO]\033[0m Dependency check failed: {e}")
         sys.exit(3)
