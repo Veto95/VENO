@@ -14,8 +14,108 @@ def timer_end(start, msg):
 
 # --- Subdomain scanning (stub: implement as needed) ---
 def subdomain_scan(domain, outdir):
-    # Implement your subdomain scan logic here
-    # Example: run_subprocess(["subfinder", "-d", domain, "-o", ...])
+     logging.info(f"[VENO] Starting subdomain scan for {domain}")
+    domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+    subfinder_out = os.path.join(domain_dir, "subfinder.txt")
+    harvester_out = os.path.join(domain_dir, "theharvester.txt")
+    all_subs_out = os.path.join(domain_dir, "all_subdomains.txt")
+    live_out = os.path.join(domain_dir, "live_subdomains.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
+
+    # 1. Run subfinder
+    try:
+        subprocess.run(
+            ["subfinder", "-silent", "-d", domain, "-o", subfinder_out],
+            check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
+        )
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"subfinder failed: {e}\n")
+    # 2. Run theHarvester
+    try:
+        subprocess.run(
+            ["theHarvester", "-d", domain, "-b", "all", "-f", harvester_out],
+            check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
+        )
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"theHarvester failed: {e}\n")
+
+    # 3. Aggregate unique subdomains
+    subs = set()
+    # Parse subfinder
+    if os.path.isfile(subfinder_out):
+        with open(subfinder_out) as f:
+            for line in f:
+                s = line.strip()
+                if s: subs.add(s)
+    # Parse theHarvester HTML output
+    if os.path.isfile(harvester_out):
+        try:
+            with open(harvester_out) as f:
+                for line in f:
+                    if domain in line and "." in line:
+                        for token in line.split():
+                            if domain in token and "." in token:
+                                subs.add(token.strip('",[]()<>'))
+        except Exception as e:
+            with open(error_log, "a") as ferr:
+                ferr.write(f"Parse theHarvester failed: {e}\n")
+    # Write all subs to file
+    with open(all_subs_out, "w") as f:
+        for s in sorted(subs):
+            f.write(f"{s}\n")
+    logging.info(f"[VENO] Found {len(subs)} unique subdomains")
+
+    # 4. Probe for live subdomains with httprobe (if installed)
+    live_subs = set()
+    try:
+        probe = subprocess.Popen(
+            ["httprobe", "-c", "50"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(error_log, "a"), text=True
+        )
+        with open(all_subs_out) as f:
+            sublist = f.read()
+            out, _ = probe.communicate(input=sublist, timeout=120)
+            for line in out.splitlines():
+                host = line.strip().replace('http://', '').replace('https://', '').split('/')[0]
+                if host: live_subs.add(host)
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"httprobe failed: {e}\n")
+    # Write live subdomains
+    with open(live_out, "w") as f:
+        for s in sorted(live_subs):
+            f.write(f"{s}\n")
+    logging.info(f"[VENO] Found {len(live_subs)} live subdomains")
+
+    # 5. Scan each live subdomain (unleash recursive scan)
+    for sub in sorted(live_subs):
+        if sub == domain: continue  # Skip root domain, already scanned
+        logging.info(f"[VENO] Launching scan for subdomain: {sub}")
+        try:
+            # Import your main scan logic here.
+            # For example, if 'full_scan' is your top-level scan function:
+            from modules.scanner import full_scan
+            # Build a config for subdomain scan (modify as needed)
+            from copy import deepcopy
+            sub_config = deepcopy({
+                "output_dir": outdir,
+                "scan_config": {"threads": 5},
+                "wordlist": "",
+                "selected_tools": [],
+                "banner_html": "",
+                "subdomains": False  # Prevent infinite recursion
+            })
+            full_scan(sub, sub_config)
+        except Exception as e:
+            with open(error_log, "a") as ferr:
+                ferr.write(f"Subdomain scan for {sub} failed: {e}\n")
+            continue
+
+    logging.info(f"[VENO] Subdomain scan completed for {domain}")
+
     logging.info(f"Subdomain scan for {domain} (stubbed)")
 
 # --- Sensitive files/juicy info extraction ---
