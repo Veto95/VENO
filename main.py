@@ -1,16 +1,14 @@
 import sys
 import logging
 import subprocess
-from modules.banner import banner  # If this is a function, rename to banner and call it as banner()
+from modules.banner import BANNER  # If a function, call as BANNER(), else print(BANNER)
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
 def print_banner():
-    if callable(banner):
-        print(banner())
-    else:
-        print(banner)
+    # Handles if BANNER is a string or a function
+    print(BANNER() if callable(BANNER) else BANNER)
 
 def print_usage():
     print("\033[1;35m[VENO]\033[0m Usage: set options, show options, run, help, update, exit")
@@ -18,10 +16,8 @@ def print_usage():
 
 def print_help():
     print("\n\033[1;35mVENO Automated Recon Shell - Full Help\033[0m\n")
-    print("  \033[1;36mshow options\033[0m")
-    print("      Prints all current settings and scan parameters.")
-    print("  \033[1;36mset <option> <value>\033[0m")
-    print("      Set a scan option. Options include:")
+    print("  \033[1;36mshow options\033[0m\n      Prints all current settings and scan parameters.")
+    print("  \033[1;36mset <option> <value>\033[0m\n      Set a scan option. Options include:")
     print("        \033[1;33mdomain\033[0m       - Target domain to scan (e.g. set domain example.com)")
     print("        \033[1;33moutput\033[0m       - Output directory for results (default: output)")
     print("        \033[1;33mthreads\033[0m      - Number of threads/tools to use (e.g. set threads 10)")
@@ -31,15 +27,10 @@ def print_help():
     print("      Example: set domain example.com")
     print("      Example: set intensity deep")
     print("      Example: set threads 50\n")
-    print("  \033[1;36mrun\033[0m")
-    print("      Launches the full scan with the current config. Results and report will be saved to your output directory.")
-    print("  \033[1;36mupdate\033[0m")
-    print("      Updates VENO to the latest version using git and pip.")
-    print("  \033[1;36mhelp\033[0m")
-    print("      Show this help message at any time.")
-    print("  \033[1;36mexit, quit\033[0m")
-    print("      Leave the shell.\n")
-
+    print("  \033[1;36mrun\033[0m\n      Launches the full scan with the current config. Results and report will be saved to your output directory.")
+    print("  \033[1;36mupdate\033[0m\n      Updates VENO to the latest version using git and pip.")
+    print("  \033[1;36mhelp\033[0m\n      Show this help message at any time.")
+    print("  \033[1;36mexit, quit\033[0m\n      Leave the shell.\n")
     print("  \033[1;35mScan Intensities (affect wordlist, tools, threads):\033[0m\n")
     for key, profile in SCAN_INTENSITIES.items():
         features = []
@@ -83,14 +74,13 @@ def update_veno():
     print("\n\033[1;36m[VENO] Updating...\033[0m")
     try:
         subprocess.run(['git', 'pull'], check=True)
-        # Optionally update dependencies too:
         subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '-r', 'requirements.txt'], check=True)
         print("\033[1;32m[VENO] Update complete! Please restart VENO if libraries were upgraded.\033[0m\n")
     except Exception as e:
         print(f"\033[1;31m[VENO] Update failed: {e}\033[0m\n")
 
 def main():
-    # Check dependencies before anything else!
+    # Dependency check ONCE, only print if fails or successful
     try:
         check_dependencies()
         print("\033[1;32m[✓] All required tools are installed.\033[0m")
@@ -98,8 +88,8 @@ def main():
         print(f"\033[1;31m[VENO]\033[0m Dependency check failed: {e}")
         sys.exit(3)
 
-    print_banner()  # Print banner at startup
-    print_usage()   # Show a compact usage summary
+    print_banner()
+    print_usage()
 
     # Default config — must match available intensities!
     default_intensity = "normal"
