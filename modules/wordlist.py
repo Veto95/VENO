@@ -1,6 +1,7 @@
 import os
 import logging
 
+# Common wordlists for web/content enumeration
 COMMON_WORDLISTS = {
     "SecLists: Discovery/Web-Content/common.txt": "/usr/share/seclists/Discovery/Web-Content/common.txt",
     "SecLists: Discovery/Web-Content/big.txt": "/usr/share/seclists/Discovery/Web-Content/big.txt",
@@ -12,19 +13,27 @@ def color(text, code):
     return f"\033[{code}m{text}\033[0m"
 
 def get_wordlist(output_dir):
-    # Check environment variable for automation/headless mode
+    """
+    Prompts the user to select a wordlist for scanning.
+    - If VENO_WORDLIST env is set and valid, uses that (automation).
+    - Otherwise, presents common wordlists and lets the user choose interactively.
+    - Ensures the chosen wordlist exists before returning.
+    Returns the path to the wordlist.
+    """
+    # Automation/headless mode via env
     env_wordlist = os.environ.get("VENO_WORDLIST")
     if env_wordlist and os.path.isfile(env_wordlist):
-        logging.info(color(f"Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
+        logging.info(color(f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
         print(color(f"[VENO] Using wordlist from VENO_WORDLIST: {env_wordlist}", "1;32"))
         return env_wordlist
 
-    # List common wordlists for interactive selection
+    # Interactive selection
     print(color("\n[VENO] Wordlist Selection", "1;36"))
     print(color("Available wordlists:", "1;37"))
     for idx, (desc, path) in enumerate(COMMON_WORDLISTS.items(), 1):
         print(color(f"  {idx}: {desc} ({path})", "1;33"))
     print(color("  0: Enter custom path", "1;35"))
+
     while True:
         try:
             choice = input(color("Select wordlist [0/1/2/3]: ", "1;34"))
