@@ -23,7 +23,7 @@ def get_scan_intensity(outdir):
     configs = {
         "fast":   {"intensity": "fast", "threads": 5, "hak_depth": 1, "sqlmap_flags": "", "recursion_depth": 1, "waf_evasion": False},
         "normal": {"intensity": "normal", "threads": 10, "hak_depth": 2, "sqlmap_flags": "--risk=1 --level=1 --random-agent", "recursion_depth": 2, "waf_evasion": False},
-        "deep":   {"intensity": "deep", "threads": 20, "hak_depth": 3, "sqlmap_flags": "--risk=3 --level=5 --random-agent --tamper=between,randomcase,space2comment", "recursion_depth": 3, "waf_evasion": True}
+        "deep":   {"intensity": "deep", "threads": 20, "hak_depth": 3, "sqlmap_flags": "--risk=3 --level=5 --random-agent --tamper=between,randomcase,space2comment", "recursion_depth": 3, "waf_evasion": True},
     }
     return configs[intensity]
 
