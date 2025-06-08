@@ -4,7 +4,7 @@ REQUIRED_TOOLS = [
     "fzf", "theHarvester", "subjack", "waybackurls", "nuclei", "paramspider",
     "gf", "arjun", "sqlmap", "ffuf", "dirsearch", "dalfox", "waymore", "uro",
     "curl", "pandoc", "hakrawler", "naabu", "gau", "httprobe", "parallel",
-    "subfinder", "XSStrike", "jq", "dig"
+    "subfinder", "xsstrike", "jq", "dig"
 ]
 
 def check_dependencies(outdir):
