@@ -1,15 +1,19 @@
 import sys
 import logging
-from modules.banner import banner  # Make sure BANNER is a string, not a function!
+import subprocess
+from modules.banner import banner  # If this is a function, rename to banner and call it as banner()
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
 def print_banner():
-    print(banner)
+    if callable(banner):
+        print(banner())
+    else:
+        print(banner)
 
 def print_usage():
-    print("\033[1;35m[VENO]\033[0m Usage: set options, show options, run, help, exit")
+    print("\033[1;35m[VENO]\033[0m Usage: set options, show options, run, help, update, exit")
     print("Type '\033[1;36mhelp\033[0m' for full command details.\n")
 
 def print_help():
@@ -29,6 +33,8 @@ def print_help():
     print("      Example: set threads 50\n")
     print("  \033[1;36mrun\033[0m")
     print("      Launches the full scan with the current config. Results and report will be saved to your output directory.")
+    print("  \033[1;36mupdate\033[0m")
+    print("      Updates VENO to the latest version using git and pip.")
     print("  \033[1;36mhelp\033[0m")
     print("      Show this help message at any time.")
     print("  \033[1;36mexit, quit\033[0m")
@@ -72,6 +78,16 @@ def merge_intensity(config, intensity):
         if key in ("wordlist", "threads"):
             continue
         config["scan_config"][key] = profile[key]
+
+def update_veno():
+    print("\n\033[1;36m[VENO] Updating...\033[0m")
+    try:
+        subprocess.run(['git', 'pull'], check=True)
+        # Optionally update dependencies too:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '-r', 'requirements.txt'], check=True)
+        print("\033[1;32m[VENO] Update complete! Please restart VENO if libraries were upgraded.\033[0m\n")
+    except Exception as e:
+        print(f"\033[1;31m[VENO] Update failed: {e}\033[0m\n")
 
 def main():
     # Check dependencies before anything else!
@@ -118,6 +134,9 @@ def main():
 
         elif cmd == "show options":
             show_options(config)
+
+        elif cmd == "update":
+            update_veno()
 
         elif cmd.startswith("set "):
             parts = cmd.split()
