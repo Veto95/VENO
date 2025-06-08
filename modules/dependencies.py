@@ -38,22 +38,25 @@ def check_and_prompt_install():
         if shutil.which(tool) is None:
             missing.append(tool)
     if not missing:
-        print("[✓] All required tools are installed.")
+        print("\033[1;32m[✓] All required tools are installed.\033[0m")
         return True
     else:
-        print("[!] Missing required tools:", ", ".join(missing))
+        print("\033[1;31m[!] Missing required tools:\033[0m", ", ".join(missing))
         for tool in missing:
-            install = input(f"Tool '{tool}' is missing. Would you like to install it now? (yes/no): ").strip().lower()
+            install = input(f"\033[1;33mTool '{tool}' is missing. Would you like to install it now? (yes/no):\033[0m ").strip().lower()
             if install in ["yes", "y"]:
-                print(f"[VENO] Installing {tool} ...")
+                print(f"\033[1;36m[VENO] Installing {tool} ...\033[0m")
                 try:
                     subprocess.run(TOOL_INSTALL_CMDS[tool], shell=True, check=True)
                 except Exception as e:
-                    print(f"[!] Failed to install {tool}: {e}")
-                    print("[!] Exiting.")
+                    print(f"\033[1;31m[!] Failed to install {tool}: {e}\033[0m")
+                    print("\033[1;31m[!] Exiting.\033[0m")
                     sys.exit(1)
             else:
-                print(f"[!] {tool} is required. Exiting.")
+                print(f"\033[1;31m[!] {tool} is required. Exiting.\033[0m")
                 sys.exit(1)
-        print("[✓] All required tools are now installed.")
+        print("\033[1;32m[✓] All required tools are now installed.\033[0m")
         return True
+
+def check_dependencies(output_dir=None):
+    check_and_prompt_install()
