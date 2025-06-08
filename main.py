@@ -2,8 +2,13 @@ import argparse
 import logging
 import os
 import sys
-from modules.banner import banner
-from modules.domain_input import get_domains
+from modules.banner import print_banner
+from modules.domain_input import (
+    get_domains,
+    load_domains,
+    clean_domain,
+    validate_domain
+)
 from modules.config import get_config
 from modules.scanner import full_scan
 
@@ -24,6 +29,22 @@ def clear_screen():
     else:
         os.system('clear')
 
+def get_valid_domains_from_arg(domains_arg, outdir):
+    # If file, load and validate
+    if os.path.isfile(domains_arg):
+        return load_domains(domains_arg, outdir)
+    # Else, treat as comma/space separated manual input
+    raw_domains = [clean_domain(d) for d in domains_arg.replace(',', ' ').split() if d.strip()]
+    valid_domains = [d for d in raw_domains if validate_domain(d)]
+    if not valid_domains:
+        msg = "[VENO] No valid domains supplied in argument."
+        if console:
+            console.print(f"[bold red]{msg}[/bold red]")
+        else:
+            print(color(msg, "red"))
+        sys.exit(1)
+    return valid_domains
+
 def main():
     print_banner(console=console, plain_fallback=color)
 
@@ -38,11 +59,7 @@ def main():
 
     # Get domains (from env, CLI, file, or interactive)
     if args.domains:
-        path = args.domains.strip()
-        if os.path.isfile(path):
-            domains = get_domains(outdir)
-        else:
-            domains = [d.strip() for d in path.replace(',', ' ').split() if d.strip()]
+        domains = get_valid_domains_from_arg(args.domains.strip(), outdir)
     else:
         domains = get_domains(outdir)
 
@@ -52,7 +69,7 @@ def main():
             console.print(f"[bold red]{msg}[/bold red]")
         else:
             print(color(msg, "red"))
-        return
+        sys.exit(1)
 
     configs = []
     for domain in domains:
@@ -66,12 +83,17 @@ def main():
     for domain, config in configs:
         domain_dir = os.path.join(outdir, domain)
         os.makedirs(domain_dir, exist_ok=True)
-        logging.basicConfig(
-            filename=os.path.join(domain_dir, "veno.log"),
-            filemode="w",
-            format="%(asctime)s %(levelname)s %(message)s",
-            level=logging.INFO
-        )
+        log_file = os.path.join(domain_dir, "veno.log")
+        logger = logging.getLogger(domain)
+        logger.setLevel(logging.INFO)
+        # Remove previous handlers
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        handler = logging.FileHandler(log_file, mode="w")
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        # Run full scan
         results = full_scan(domain, config)
         msg = f"[VENO] Scan complete for {domain}! See {outdir}/{domain}/report.html"
         if console:
