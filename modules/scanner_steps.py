@@ -4,11 +4,10 @@ import subprocess
 import time
 import hashlib
 import logging
-from modules.dependencies import check_dependencies
+from modules.dependencies import check_dependencies, dependencies
 
 try:
     from rich.console import Console
-    from rich.progress import Progress
     console = Console()
 except ImportError:
     console = None
@@ -28,7 +27,11 @@ def timer_end(start, msg):
     else:
         print(color(msg, "green"))
 
-def subdomain_scan(domain, outdir, context):
+def step_check_dependencies(domain, config, context):
+    check_dependencies(config.get("output_dir") or "output")
+
+def step_subdomain_enum(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     msg = f"[VENO] Starting subdomain scan for {domain}"
     if console: console.print(f"[cyan]{msg}[/cyan]")
     else: print(color(msg, "cyan"))
@@ -42,7 +45,7 @@ def subdomain_scan(domain, outdir, context):
     # 1. Run subfinder
     try:
         subprocess.run(
-            [dependencies["subfinder"], "-silent", "-d", domain, "-o", subfinder_out],
+            ["subfinder", "-silent", "-d", domain, "-o", subfinder_out],
             check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
         )
     except Exception as e:
@@ -51,7 +54,7 @@ def subdomain_scan(domain, outdir, context):
     # 2. Run theHarvester
     try:
         subprocess.run(
-            [dependencies["theHarvester"], "-d", domain, "-b", "all", "-f", harvester_out],
+            ["theHarvester", "-d", domain, "-b", "all", "-f", harvester_out],
             check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
         )
     except Exception as e:
@@ -83,12 +86,11 @@ def subdomain_scan(domain, outdir, context):
     if console: console.print(f"[green]{msg}[/green]")
     else: print(color(msg, "green"))
     context['subdomains'] = list(subs)
-
     # 4. Probe for live subdomains with httprobe
     live_subs = set()
     try:
         probe = subprocess.Popen(
-            [dependencies["httprobe"], "-c", "50"],
+            ["httprobe", "-c", "50"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(error_log, "a"), text=True
         )
         with open(all_subs_out) as f:
@@ -109,20 +111,22 @@ def subdomain_scan(domain, outdir, context):
     else: print(color(msg, "green"))
     context['live_subdomains'] = list(live_subs)
 
-def wayback_urls(domain, outdir, context):
+def step_wayback_urls(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
     error_log = f"{outdir}/{domain}/errors.log"
     try:
         with open(wayback_file, "w") as f:
-            subprocess.run([dependencies["waybackurls"], domain], stdout=f, stderr=open(error_log, "a"), check=True)
+            subprocess.run(["waybackurls", domain], stdout=f, stderr=open(error_log, "a"), check=True)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"waybackurls failed: {e}\n")
     timer_end(start, "Wayback URLs enumeration")
     context['waybackurls'] = wayback_file
 
-def extract_sensitive_files(domain, outdir, context):
+def step_sensitive_file_enum(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     start = timer_start()
     wayback_file = context.get('waybackurls', f"{outdir}/{domain}/waybackurls.txt")
     sensitive_file = f"{outdir}/{domain}/sensitive_files.txt"
@@ -137,7 +141,7 @@ def extract_sensitive_files(domain, outdir, context):
             with open(sensitive_file, "w") as fout:
                 found = False
                 for url in urls:
-                    is_live, has_sensitive = live_check(url, sensitive_keywords)
+                    is_live, has_sensitive = step_live_check(url, sensitive_keywords)
                     if is_live:
                         found = True
                         mark = "[SENSITIVE]" if has_sensitive else "[LIVE]"
@@ -154,7 +158,7 @@ def extract_sensitive_files(domain, outdir, context):
     timer_end(start, "Sensitive file extraction")
     context['sensitive_files'] = live_sensitive
 
-def live_check(url, keywords=None):
+def step_live_check(url, keywords=None):
     try:
         r = subprocess.run(["curl", "-sL", "--max-time", "8", url], capture_output=True, check=True, timeout=10)
         body = r.stdout.decode(errors="ignore")
@@ -164,7 +168,8 @@ def live_check(url, keywords=None):
     except Exception:
         return False, False
 
-def grep_juicy_info(domain, outdir, context):
+def step_juicy_info(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     start = timer_start()
     wayback_file = context.get('waybackurls', f"{outdir}/{domain}/waybackurls.txt")
     juicy_file = f"{outdir}/{domain}/juicy_info.txt"
@@ -193,7 +198,7 @@ def grep_juicy_info(domain, outdir, context):
                 for url in urls:
                     if any(fp in url for fp in false_positives):
                         continue
-                    is_live, has_sensitive = live_check(url)
+                    is_live, has_sensitive = step_live_check(url)
                     if is_live:
                         found = True
                         fout.write(f"[LIVE] {url}\n")
@@ -226,7 +231,8 @@ def grep_juicy_info(domain, outdir, context):
     timer_end(start, "Juicy info extraction")
     context['juicy'] = live_juicy
 
-def discover_parameters(domain, outdir, context):
+def step_param_discovery(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     logging.info(f"Discovering dynamic parameters for {domain}")
     start = timer_start()
     paramspider_out = f"{outdir}/{domain}/paramspider.txt"
@@ -235,7 +241,7 @@ def discover_parameters(domain, outdir, context):
     vulnerable_urls = []
     try:
         subprocess.run(
-            [dependencies["paramspider"], "-d", domain], 
+            ["paramspider", "-d", domain], 
             stdout=open(paramspider_out, "w"), 
             stderr=open(error_log, "a"), 
             check=True, timeout=300
@@ -249,7 +255,7 @@ def discover_parameters(domain, outdir, context):
             for url in urls:
                 f.write(url + "\n")
         subprocess.run(
-            [dependencies["arjun"], "-i", "arjun_urls.txt", "-oT", arjun_out], 
+            ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out], 
             stderr=open(error_log, "a"), check=True, timeout=300
         )
         with open(arjun_out) as f:
@@ -265,7 +271,8 @@ def discover_parameters(domain, outdir, context):
     timer_end(start, "Dynamic parameter discovery")
     context['vuln_urls'] = vulnerable_urls
 
-def advanced_xss_vuln_hunting(domain, outdir, context):
+def step_advanced_xss(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     logging.info(f"Running advanced XSS and vulnerability hunting for {domain}")
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
@@ -273,7 +280,7 @@ def advanced_xss_vuln_hunting(domain, outdir, context):
     xsstrike_out = f"{outdir}/{domain}/xsstrike.txt"
     try:
         subprocess.run([
-            dependencies["dalfox"], "file", f"{outdir}/{domain}/paramspider.txt",
+            "dalfox", "file", f"{outdir}/{domain}/paramspider.txt",
             "--custom-payload", "/usr/share/xss-payloads.txt",
             "--output", dalfox_out
         ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
@@ -282,7 +289,7 @@ def advanced_xss_vuln_hunting(domain, outdir, context):
             ferr.write(f"dalfox failed: {e}\n")
     try:
         subprocess.run([
-            dependencies["xsstrike"], "-l", f"{outdir}/{domain}/paramspider.txt",
+            "xsstrike", "-l", f"{outdir}/{domain}/paramspider.txt",
             "-o", xsstrike_out
         ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
     except Exception as e:
@@ -291,7 +298,8 @@ def advanced_xss_vuln_hunting(domain, outdir, context):
     timer_end(start, "Advanced XSS/vuln hunting")
     context['xss'] = dalfox_out
 
-def directory_fuzzing(domain, outdir, context):
+def step_dir_fuzz(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     fuzz_results = []
@@ -307,7 +315,7 @@ def directory_fuzzing(domain, outdir, context):
     if tool == "dirsearch":
         try:
             subprocess.run([
-                "python3", dependencies["dirsearch"] + "/dirsearch.py", "-u", f"http://{domain}",
+                "python3", "dirsearch/dirsearch.py", "-u", f"http://{domain}",
                 "-w", wordlist,
                 "--threads", str(threads),
                 "-o", result_file,
@@ -325,7 +333,7 @@ def directory_fuzzing(domain, outdir, context):
     else:
         try:
             subprocess.run([
-                dependencies["ffuf"], "-u", f"http://{domain}/FUZZ",
+                "ffuf", "-u", f"http://{domain}/FUZZ",
                 "-w", wordlist,
                 "-t", str(threads),
                 "-of", "csv",
@@ -355,7 +363,9 @@ def directory_fuzzing(domain, outdir, context):
     timer_end(start, "Directory fuzzing")
     context['dir_fuzz'] = fuzz_results
 
-def sqlmap_on_vuln_urls(vuln_urls, outdir, domain, context):
+def step_sqlmap(domain, config, context):
+    outdir = config.get("output_dir") or "output"
+    vuln_urls = context.get('vuln_urls', [])
     logging.info(f"Running sqlmap on discovered vulnerable URLs for {domain}")
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
@@ -365,7 +375,7 @@ def sqlmap_on_vuln_urls(vuln_urls, outdir, domain, context):
         os.makedirs(sqlmap_dir, exist_ok=True)
         try:
             subprocess.run([
-                dependencies["sqlmap"], "-u", url, "--batch", f"--output-dir={sqlmap_dir}"
+                "sqlmap", "-u", url, "--batch", f"--output-dir={sqlmap_dir}"
             ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
             sqlmap_logs.append(sqlmap_dir)
         except Exception as e:
@@ -374,15 +384,12 @@ def sqlmap_on_vuln_urls(vuln_urls, outdir, domain, context):
     timer_end(start, "Targeted SQL injection testing")
     context['sqlmap'] = sqlmap_logs
 
-def run_nuclei_chain(domain, outdir, context):
-    """
-    Aggregate all URLs/paths/endpoints found and scan them with Nuclei.
-    """
+def step_nuclei_chain(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     nuclei_targets = set()
 
-    # Add everything found by all tools to the Nuclei targets
     nuclei_targets.update(context.get('live_subdomains', []))
     nuclei_targets.update(context.get('dir_fuzz', []))
     nuclei_targets.update(context.get('juicy', []))
@@ -414,7 +421,7 @@ def run_nuclei_chain(domain, outdir, context):
     nuclei_out = f"{outdir}/{domain}/nuclei_chained.txt"
     try:
         subprocess.run([
-            dependencies["nuclei"],
+            "nuclei",
             "-l", nuclei_targets_file,
             "-o", nuclei_out,
             "-silent",
@@ -427,8 +434,10 @@ def run_nuclei_chain(domain, outdir, context):
     timer_end(start, "Nuclei chained scan")
     context['nuclei_chained'] = nuclei_out
 
-def generate_html_report(domain, outdir, banner_html, context):
+def step_report(domain, config, context):
+    outdir = config.get("output_dir") or "output"
     html_report = f"{outdir}/{domain}/report.html"
+    banner_html = "<pre>VENO BANNER HERE</pre>"
     with open(html_report, "w", encoding="utf-8") as fout:
         html_code = f"""<!DOCTYPE html>
 <html lang="en">
@@ -454,7 +463,7 @@ pre {{ white-space: pre-wrap; word-break: break-word; background: #f9f9f9; paddi
 <li>Nuclei findings: {context.get('nuclei_chained', '')}</li>
 </ul>
 </div>
-<!-- You can expand this to include more detailed results -->
+<!-- Expand this section to include more detailed results -->
 </body></html>
 """
         fout.write(html_code)
@@ -462,17 +471,16 @@ pre {{ white-space: pre-wrap; word-break: break-word; background: #f9f9f9; paddi
     if console: console.print(f"[magenta]{msg}[/magenta]")
     else: print(color(msg, "magenta"))
 
-def chain_vulnerabilities(context):
-    chains = []
-    if 'subdomains' in context and 'sensitive_files' in context:
-        for sub in context['subdomains']:
-            for vul in context['sensitive_files']:
-                if sub in vul:
-                    chains.append((sub, vul))
-    if 'vuln_urls' in context and 'sqlmap' in context:
-        for url in context['vuln_urls']:
-            for sdir in context['sqlmap']:
-                if url in sdir:
-                    chains.append((url, sdir))
-    # more chain logic as desired
-    return chains
+scanner_steps = [
+    step_check_dependencies,
+    step_subdomain_enum,
+    step_wayback_urls,
+    step_sensitive_file_enum,
+    step_juicy_info,
+    step_param_discovery,
+    step_advanced_xss,
+    step_dir_fuzz,
+    step_sqlmap,
+    step_nuclei_chain,
+    step_report,
+]
