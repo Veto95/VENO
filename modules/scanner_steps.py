@@ -4,7 +4,7 @@ import subprocess
 import time
 import hashlib
 import logging
-from modules.dependencies import dependencies
+from modules.dependencies import check_dependencies
 
 try:
     from rich.console import Console
