@@ -5,7 +5,7 @@ import sys
 from modules.banner import banner
 from modules.domain_input import get_domains
 from modules.config import get_config
-from scanner import full_scan
+from modules.scanner import full_scan
 
 try:
     from rich.console import Console
