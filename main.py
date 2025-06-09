@@ -58,10 +58,15 @@ def safe_path(path):
     return re.sub(r'[^A-Za-z0-9_\-\.\/]', '', path)
 
 def print_banner():
-    if console:
-        console.print(banner() if callable(banner) else banner)
-    else:
-        print(banner() if callable(banner) else banner)
+    try:
+        val = banner() if callable(banner) else banner
+        if val is not None and str(val).strip():
+            if console:
+                console.print(val)
+            else:
+                print(val)
+    except Exception:
+        pass
 
 def print_usage():
     msg = color("[VENO]", "magenta") + " Usage: set options, show options, run, help, clear, exit"
@@ -264,6 +269,7 @@ def main():
         elif cmd == "clear":
             os.system('cls' if os.name == 'nt' else 'clear')
             print_banner()
+            print_usage()
             continue  # Immediately re-prompts after clear
         elif cmd.startswith("save config "):
             _, _, filename = cmd.partition(" ")
