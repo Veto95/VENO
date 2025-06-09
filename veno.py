@@ -15,7 +15,6 @@ except ImportError:
     RICH_AVAILABLE = False
     console = None
 
-# Module imports with error handling
 try:
     from modules.banner import banner
 except Exception as e:
@@ -47,7 +46,6 @@ except Exception as e:
         else:
             print(f"\033[1;31m{err}\033[0m")
 
-# Meme module (optional)
 try:
     from modules.memes import get_ascii_meme, get_insult
     HAS_MEMES = True
@@ -143,16 +141,12 @@ def print_help():
         "      Launches the full scan with the current config.",
         "  " + color("save config <filename>", "cyan", bold=True),
         "      Saves current config to a file.",
-        "  " + color("load config <filename>", "cyan", bold=True),
-        "      Loads config from a file.",
         "  " + color("timer", "cyan", bold=True),
         "      Show session elapsed time.",
         "  " + color("clear", "cyan", bold=True),
         "      Clears the screen and reprints the VENO banner.",
         "  " + color("help", "cyan", bold=True),
         "      Show this help message at any time.",
-        "  " + color("-h, --help", "cyan", bold=True),
-        "      Show basic usage summary at any time.",
         "  " + color("exit, quit", "cyan", bold=True),
         "      Leave the shell.\n",
         color("Scan Intensities (affect wordlist, tools, threads):", "magenta", bold=True) + "\n"
@@ -248,23 +242,6 @@ def save_config(config, filename):
         else:
             print(color(f"[VENO] Failed to save config: {e}", "red", bold=True, bg="black"))
 
-def load_config(config, filename):
-    try:
-        filename = safe_path(filename)
-        with open(filename, 'r') as f:
-            loaded = json.load(f)
-            config.clear()
-            config.update(loaded)
-        if console:
-            console.print(color(f"[VENO] Config loaded from {filename}", "green", bold=True))
-        else:
-            print(color(f"[VENO] Config loaded from {filename}", "green", bold=True))
-    except Exception as e:
-        if console:
-            console.print(color(f"[VENO] Failed to load config: {e}", "red", bold=True, bg="black"))
-        else:
-            print(color(f"[VENO] Failed to load config: {e}", "red", bold=True, bg="black"))
-
 def validate_domain(domain):
     pat = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$")
     return bool(pat.match(domain))
@@ -348,8 +325,6 @@ def main():
 
         elif cmd == "help":
             print_help()
-        elif cmd in ("-h", "--help"):
-            print_usage()
         elif cmd in ("show options", "options"):
             show_options(config)
         elif cmd == "clear":
@@ -364,17 +339,6 @@ def main():
                 save_config(config, filename)
             else:
                 err = color("[VENO] Usage: save config <filename>", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
-                else:
-                    print(err)
-        elif cmd.startswith("load config "):
-            _, _, filename = cmd.partition(" ")
-            filename = filename.strip().split(" ", 1)[-1]
-            if filename:
-                load_config(config, filename)
-            else:
-                err = color("[VENO] Usage: load config <filename>", "red", bold=True, bg="black")
                 if console:
                     console.print(err)
                 else:
