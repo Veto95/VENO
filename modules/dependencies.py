@@ -138,7 +138,6 @@ def check_and_prompt_install(output_dir=None):
     if failed:
         print_error(f"Failed to install: {', '.join(failed)}. Exiting.")
         sys.exit(1)
-    print_success("All required tools now installed.")
     return True
 
 def check_dependencies(output_dir=None):
