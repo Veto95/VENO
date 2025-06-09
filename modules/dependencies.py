@@ -117,7 +117,6 @@ def check_and_prompt_install(output_dir=None):
     """
     missing = check_missing_tools_parallel()
     if not missing:
-        print_success("All required tools are installed.")
         return True
 
     print_error(f"Missing required tools: {', '.join(missing)}")
