@@ -12,7 +12,7 @@ def banner():
              VENO v1.0
         BUG HUNTING & RECON TOOL
 
-         coder: 0xCACT2S (Veto95)
+         coder: 0xCACT2S
  Telegram: HELL SHELL [https://t.me/hacking_hell1]
    GitHub: https://github.com/Veto95/VENO
     """)
