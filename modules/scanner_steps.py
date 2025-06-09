@@ -27,14 +27,20 @@ def timer_end(start, msg):
     else:
         print(color(msg, "green"))
 
+def print_step(msg):
+    # Minimal output: just what the step is, nothing else
+    if console:
+        console.print(f"[cyan][VENO][/cyan] {msg}")
+    else:
+        print(color(f"[VENO] {msg}", "cyan"))
+
 def step_check_dependencies(domain, config, context):
+    print_step("Checking dependencies")
     check_dependencies(config.get("output_dir") or "output")
 
 def step_subdomain_enum(domain, config, context):
+    print_step("Enumerating subdomains")
     outdir = config.get("output_dir") or "output"
-    msg = f"[VENO] Starting subdomain scan for {domain}"
-    if console: console.print(f"[cyan]{msg}[/cyan]")
-    else: print(color(msg, "cyan"))
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
     subfinder_out = os.path.join(domain_dir, "subfinder.txt")
@@ -42,26 +48,22 @@ def step_subdomain_enum(domain, config, context):
     all_subs_out = os.path.join(domain_dir, "all_subdomains.txt")
     error_log = os.path.join(domain_dir, "errors.log")
 
-    # 1. Run subfinder
     try:
         subprocess.run(
             ["subfinder", "-silent", "-d", domain, "-o", subfinder_out],
-            check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180
         )
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"subfinder failed: {e}\n")
-    # 2. Run theHarvester
     try:
         subprocess.run(
             ["theHarvester", "-d", domain, "-b", "all", "-f", harvester_out],
-            check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=180
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180
         )
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"theHarvester failed: {e}\n")
-
-    # 3. Deduplicate and aggregate unique subdomains
     subs = set()
     if os.path.isfile(subfinder_out):
         with open(subfinder_out) as f:
@@ -82,16 +84,14 @@ def step_subdomain_enum(domain, config, context):
     with open(all_subs_out, "w") as f:
         for s in sorted(subs):
             f.write(f"{s}\n")
-    msg = f"[VENO] Found {len(subs)} unique subdomains"
-    if console: console.print(f"[green]{msg}[/green]")
-    else: print(color(msg, "green"))
     context['subdomains'] = list(subs)
-    # 4. Probe for live subdomains with httprobe
+    # Probe for live subdomains with httprobe
+    print_step("Probing live subdomains")
     live_subs = set()
     try:
         probe = subprocess.Popen(
             ["httprobe", "-c", "50"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(error_log, "a"), text=True
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
         )
         with open(all_subs_out) as f:
             sublist = f.read()
@@ -106,28 +106,24 @@ def step_subdomain_enum(domain, config, context):
     with open(live_out, "w") as f:
         for s in sorted(live_subs):
             f.write(f"{s}\n")
-    msg = f"[VENO] Found {len(live_subs)} live subdomains"
-    if console: console.print(f"[green]{msg}[/green]")
-    else: print(color(msg, "green"))
     context['live_subdomains'] = list(live_subs)
 
 def step_wayback_urls(domain, config, context):
+    print_step("Fetching wayback URLs")
     outdir = config.get("output_dir") or "output"
-    start = timer_start()
     wayback_file = f"{outdir}/{domain}/waybackurls.txt"
     error_log = f"{outdir}/{domain}/errors.log"
     try:
         with open(wayback_file, "w") as f:
-            subprocess.run(["waybackurls", domain], stdout=f, stderr=open(error_log, "a"), check=True)
+            subprocess.run(["waybackurls", domain], stdout=f, stderr=subprocess.DEVNULL, check=True)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"waybackurls failed: {e}\n")
-    timer_end(start, "Wayback URLs enumeration")
     context['waybackurls'] = wayback_file
 
 def step_sensitive_file_enum(domain, config, context):
+    print_step("Extracting sensitive files")
     outdir = config.get("output_dir") or "output"
-    start = timer_start()
     wayback_file = context.get('waybackurls', f"{outdir}/{domain}/waybackurls.txt")
     sensitive_file = f"{outdir}/{domain}/sensitive_files.txt"
     error_log = f"{outdir}/{domain}/errors.log"
@@ -155,7 +151,6 @@ def step_sensitive_file_enum(domain, config, context):
         except Exception as e:
             with open(error_log, "a") as ferr:
                 ferr.write(f"Failed to extract sensitive files: {e}\n")
-    timer_end(start, "Sensitive file extraction")
     context['sensitive_files'] = live_sensitive
 
 def step_live_check(url, keywords=None):
@@ -169,8 +164,8 @@ def step_live_check(url, keywords=None):
         return False, False
 
 def step_juicy_info(domain, config, context):
+    print_step("Extracting juicy info (secrets, keys, tokens, JS)")
     outdir = config.get("output_dir") or "output"
-    start = timer_start()
     wayback_file = context.get('waybackurls', f"{outdir}/{domain}/waybackurls.txt")
     juicy_file = f"{outdir}/{domain}/juicy_info.txt"
     js_dir = f"{outdir}/{domain}/js_files"
@@ -209,7 +204,7 @@ def step_juicy_info(domain, config, context):
                     filename = hashlib.sha1(url.encode()).hexdigest() + ".js"
                     js_path = os.path.join(js_dir, filename)
                     try:
-                        subprocess.run(["curl", "-s", "-m", "10", url, "-o", js_path], check=True)
+                        subprocess.run(["curl", "-s", "-m", "10", url, "-o", js_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                         if os.path.isfile(js_path):
                             with open(js_path) as jsf:
                                 for jsline in jsf:
@@ -228,13 +223,11 @@ def step_juicy_info(domain, config, context):
         except Exception as e:
             with open(error_log, "a") as ferr:
                 ferr.write(f"Failed to grep juicy info: {e}\n")
-    timer_end(start, "Juicy info extraction")
     context['juicy'] = live_juicy
 
 def step_param_discovery(domain, config, context):
+    print_step("Discovering dynamic parameters")
     outdir = config.get("output_dir") or "output"
-    logging.info(f"Discovering dynamic parameters for {domain}")
-    start = timer_start()
     paramspider_out = f"{outdir}/{domain}/paramspider.txt"
     arjun_out = f"{outdir}/{domain}/arjun.txt"
     error_log = f"{outdir}/{domain}/errors.log"
@@ -243,7 +236,7 @@ def step_param_discovery(domain, config, context):
         subprocess.run(
             ["paramspider", "-d", domain], 
             stdout=open(paramspider_out, "w"), 
-            stderr=open(error_log, "a"), 
+            stderr=subprocess.DEVNULL, 
             check=True, timeout=300
         )
         urls = []
@@ -256,7 +249,7 @@ def step_param_discovery(domain, config, context):
                 f.write(url + "\n")
         subprocess.run(
             ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out], 
-            stderr=open(error_log, "a"), check=True, timeout=300
+            stderr=subprocess.DEVNULL, check=True, timeout=300
         )
         with open(arjun_out) as f:
             for line in f:
@@ -268,13 +261,11 @@ def step_param_discovery(domain, config, context):
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"Parameter discovery failed: {e}\n")
-    timer_end(start, "Dynamic parameter discovery")
     context['vuln_urls'] = vulnerable_urls
 
 def step_advanced_xss(domain, config, context):
+    print_step("Scanning for XSS and other vulnerabilities")
     outdir = config.get("output_dir") or "output"
-    logging.info(f"Running advanced XSS and vulnerability hunting for {domain}")
-    start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     dalfox_out = f"{outdir}/{domain}/dalfox.txt"
     xsstrike_out = f"{outdir}/{domain}/xsstrike.txt"
@@ -283,7 +274,7 @@ def step_advanced_xss(domain, config, context):
             "dalfox", "file", f"{outdir}/{domain}/paramspider.txt",
             "--custom-payload", "/usr/share/xss-payloads.txt",
             "--output", dalfox_out
-        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"dalfox failed: {e}\n")
@@ -291,16 +282,15 @@ def step_advanced_xss(domain, config, context):
         subprocess.run([
             "xsstrike", "-l", f"{outdir}/{domain}/paramspider.txt",
             "-o", xsstrike_out
-        ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"XSStrike failed: {e}\n")
-    timer_end(start, "Advanced XSS/vuln hunting")
     context['xss'] = dalfox_out
 
 def step_dir_fuzz(domain, config, context):
+    print_step("Directory and file fuzzing")
     outdir = config.get("output_dir") or "output"
-    start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     fuzz_results = []
     result_file = f"{outdir}/{domain}/dir_fuzz.txt"
@@ -308,9 +298,6 @@ def step_dir_fuzz(domain, config, context):
     wordlist = context.get("wordlist") or "/usr/share/seclists/Discovery/Web-Content/common.txt"
     tool = scan_config.get("dir_fuzz_tool", "ffuf")
     threads = scan_config.get("threads", 10)
-    msg = f"[VENO] Starting directory fuzzing for {domain} using {tool.upper()}"
-    if console: console.print(f"[yellow]{msg}[/yellow]")
-    else: print(color(msg, "yellow"))
 
     if tool == "dirsearch":
         try:
@@ -320,7 +307,7 @@ def step_dir_fuzz(domain, config, context):
                 "--threads", str(threads),
                 "-o", result_file,
                 "--format", "plain"
-            ], check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
             if os.path.isfile(result_file):
                 with open(result_file) as f:
                     for line in f:
@@ -338,7 +325,7 @@ def step_dir_fuzz(domain, config, context):
                 "-t", str(threads),
                 "-of", "csv",
                 "-o", result_file
-            ], check=True, stdout=subprocess.DEVNULL, stderr=open(error_log, "a"))
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
             if os.path.isfile(result_file):
                 with open(result_file) as f:
                     for line in f:
@@ -356,18 +343,12 @@ def step_dir_fuzz(domain, config, context):
         f.write("\n# Deduped Fuzz Results\n")
         for path in fuzz_results:
             f.write(path + "\n")
-
-    msg = f"[VENO] Directory fuzzing found {len(fuzz_results)} unique paths"
-    if console: console.print(f"[green]{msg}[/green]")
-    else: print(color(msg, "green"))
-    timer_end(start, "Directory fuzzing")
     context['dir_fuzz'] = fuzz_results
 
 def step_sqlmap(domain, config, context):
+    print_step("Running SQL injection tests")
     outdir = config.get("output_dir") or "output"
     vuln_urls = context.get('vuln_urls', [])
-    logging.info(f"Running sqlmap on discovered vulnerable URLs for {domain}")
-    start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     sqlmap_logs = []
     for i, url in enumerate(vuln_urls):
@@ -376,17 +357,16 @@ def step_sqlmap(domain, config, context):
         try:
             subprocess.run([
                 "sqlmap", "-u", url, "--batch", f"--output-dir={sqlmap_dir}"
-            ], stdout=subprocess.DEVNULL, stderr=open(error_log, "a"), timeout=300)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
             sqlmap_logs.append(sqlmap_dir)
         except Exception as e:
             with open(error_log, "a") as ferr:
                 ferr.write(f"sqlmap on {url} failed: {e}\n")
-    timer_end(start, "Targeted SQL injection testing")
     context['sqlmap'] = sqlmap_logs
 
 def step_nuclei_chain(domain, config, context):
+    print_step("Running nuclei chain scan")
     outdir = config.get("output_dir") or "output"
-    start = timer_start()
     error_log = f"{outdir}/{domain}/errors.log"
     nuclei_targets = set()
 
@@ -426,15 +406,14 @@ def step_nuclei_chain(domain, config, context):
             "-o", nuclei_out,
             "-silent",
             "-c", str(context.get("scan_config", {}).get("threads", 10)),
-        ], stderr=open(error_log, "a"), check=True)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     except Exception as e:
         with open(error_log, "a") as ferr:
             ferr.write(f"Nuclei chained scan failed: {e}\n")
-
-    timer_end(start, "Nuclei chained scan")
     context['nuclei_chained'] = nuclei_out
 
 def step_report(domain, config, context):
+    print_step("Generating HTML report")
     outdir = config.get("output_dir") or "output"
     html_report = f"{outdir}/{domain}/report.html"
     banner_html = "<pre>VENO BANNER HERE</pre>"
@@ -467,9 +446,6 @@ pre {{ white-space: pre-wrap; word-break: break-word; background: #f9f9f9; paddi
 </body></html>
 """
         fout.write(html_code)
-    msg = f"[VENO] Generated HTML report for {domain}"
-    if console: console.print(f"[magenta]{msg}[/magenta]")
-    else: print(color(msg, "magenta"))
 
 scanner_steps = [
     step_check_dependencies,
