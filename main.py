@@ -5,8 +5,6 @@ import os
 import json
 import time
 import re
-import importlib
-import glob
 
 try:
     from rich.console import Console
@@ -22,22 +20,18 @@ from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
-# Try to import memes (optional, fun)
+# Meme module (optional)
 try:
     from modules.memes import get_ascii_meme, get_insult
     HAS_MEMES = True
-except Exception:
+except ImportError:
     HAS_MEMES = False
 
-ASCII_ANIM_ENABLED = True
 ASCII_FRAMES = [
     "🐍    ", " 🐍   ", "  🐍  ", "   🐍 ", "    🐍", "   🐍 ", "  🐍  ", " 🐍   "
 ]
 
 def ascii_loader(message, duration=2):
-    if not ASCII_ANIM_ENABLED:
-        print(message)
-        return
     from time import sleep
     t_end = time.time() + duration
     i = 0
@@ -100,8 +94,6 @@ def print_help():
         "      Saves current config to a file.",
         "  " + color("load config <filename>", "cyan"),
         "      Loads config from a file.",
-        "  " + color("toggle ascii", "cyan"),
-        "      Enable/disable ASCII loader animation for long ops.",
         "  " + color("timer", "cyan"),
         "      Show session elapsed time.",
         "  " + color("clear", "cyan"),
@@ -217,7 +209,13 @@ def main():
     session_start = time.time()
     try:
         check_dependencies()
-        print(color("[✓] All required tools are installed.", "green"))
+        msg = color("🔥 [VENO] ALL DEPENDENCIES SATISFIED! 🔥", "green")
+        if console:
+            console.rule(msg)
+        else:
+            print("="*60)
+            print(msg)
+            print("="*60)
     except Exception as e:
         print(color(f"[VENO] Dependency check failed: {e}", "red"))
         sys.exit(3)
@@ -236,8 +234,6 @@ def main():
         },
         "wordlist": "",
     }
-
-    global ASCII_ANIM_ENABLED
 
     while True:
         try:
@@ -283,9 +279,6 @@ def main():
                 load_config(config, filename)
             else:
                 print(color("[VENO] Usage: load config <filename>", "red"))
-        elif cmd == "toggle ascii":
-            ASCII_ANIM_ENABLED = not ASCII_ANIM_ENABLED
-            print(color(f"[VENO] ASCII animation {'enabled' if ASCII_ANIM_ENABLED else 'disabled'}", "green"))
         elif cmd == "timer":
             elapsed = time.time() - session_start
             mins, secs = divmod(int(elapsed), 60)
@@ -337,7 +330,7 @@ def main():
                 if HAS_MEMES:
                     print(color(get_ascii_meme(), "yellow"))
                 print(color(f"[VENO] Starting full scan for {domain} (intensity: {config['intensity']})", "magenta"))
-                ascii_loader("[VENO] Starting scan..." if ASCII_ANIM_ENABLED else "[VENO] Scan running...", duration=2)
+                ascii_loader("[VENO] Starting scan...", duration=2)
                 result = full_scan(domain, config)
                 print(color(f"[VENO] Scan completed for {domain}", "green"))
                 print(color(f"Report: {os.path.join(config['output_dir'], domain, 'report.html')}", "yellow"))
