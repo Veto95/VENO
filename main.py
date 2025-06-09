@@ -15,10 +15,29 @@ except ImportError:
     RICH_AVAILABLE = False
     console = None
 
-from modules.banner import banner
-from modules.scanner import full_scan
-from modules.scan_intensity import SCAN_INTENSITIES
-from modules.dependencies import check_dependencies
+# Module imports with error handling
+try:
+    from modules.banner import banner
+except Exception as e:
+    banner = lambda: f"[!] Failed to load banner module: {e}"
+
+try:
+    from modules.scanner import full_scan
+except Exception as e:
+    def full_scan(*args, **kwargs):
+        print(f"[!] Scanner module not available: {e}")
+
+try:
+    from modules.scan_intensity import SCAN_INTENSITIES
+except Exception as e:
+    SCAN_INTENSITIES = {}
+    print(f"[!] scan_intensity module error: {e}")
+
+try:
+    from modules.dependencies import check_dependencies
+except Exception as e:
+    def check_dependencies():
+        print(f"[!] dependencies module not available: {e}")
 
 # Meme module (optional)
 try:
@@ -26,20 +45,22 @@ try:
     HAS_MEMES = True
 except ImportError:
     HAS_MEMES = False
+    get_ascii_meme = lambda: "¯\\_(ツ)_/¯"
+    get_insult = lambda: "No memes for you!"
 
 # CAT ASCII FRAMES for LOADER
 CAT_FRAMES = [
-r''' /\_/\  
+    r''' /\_/\  
 ( o.o )''',
-r''' /\_/\  
+    r''' /\_/\  
 ( -.- )''',
-r''' /\_/\  
+    r''' /\_/\  
 ( o.o )''',
-r''' /\_/\  
+    r''' /\_/\  
 ( -.- )~''',
-r''' /\_/\  
+    r''' /\_/\  
 ( o.o )~''',
-r''' /\_/\  
+    r''' /\_/\  
 ( -.- )''',
 ]
 
@@ -88,7 +109,8 @@ def print_banner():
                 print("\033[1;35m" + "─" * 65 + "\033[0m")
                 print("\033[1;32m" + val + "\033[0m")
                 print("\033[1;35m" + "─" * 65 + "\033[0m")
-    except Exception: pass
+    except Exception as e:
+        print(f"[!] Failed to print banner: {e}")
 
 def print_usage():
     msg = color("[VENO]", "cyan", bold=True) + color(" Usage: set options, show options, run, help, clear, exit", "white")
@@ -138,8 +160,8 @@ def print_help():
         if profile.get("run_sqlmap"): features.append("sqlmap")
         features_str = " | ".join(features)
         lines.append(
-            f"    {color(key, 'yellow', bold=True)}: wordlist={os.path.basename(profile['wordlist'])}, threads={profile['threads']}" +
-            (", " + features_str if features_str else ""))
+            f"    {color(key, 'yellow', bold=True)}: wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, threads={profile['threads'] if 'threads' in profile else 'N/A'}"
+            + (", " + features_str if features_str else ""))
     lines += [
         "\n  " + color("Example Usage:", "magenta", bold=True),
         "      set domain example.com",
@@ -174,8 +196,8 @@ def merge_intensity(config, intensity):
         return
     profile = SCAN_INTENSITIES[intensity]
     config["intensity"] = intensity
-    config["wordlist"] = profile["wordlist"]
-    config["scan_config"]["threads"] = profile["threads"]
+    config["wordlist"] = profile.get("wordlist", "")
+    config["scan_config"]["threads"] = profile.get("threads", 20)
     for key in profile:
         if key in ("wordlist", "threads"): continue
         config["scan_config"][key] = profile[key]
@@ -186,6 +208,10 @@ def ensure_output_dirs(config):
     if domain:
         path = os.path.join(output_dir, domain)
         os.makedirs(path, exist_ok=True)
+
+def safe_path(path):
+    # Super basic sanitization, can be improved
+    return os.path.abspath(os.path.expanduser(path))
 
 def save_config(config, filename):
     try:
@@ -258,6 +284,10 @@ def main():
         "wordlist": "",
     }
 
+    # Set defaults from intensity if available
+    if default_intensity in SCAN_INTENSITIES:
+        merge_intensity(config, default_intensity)
+
     while True:
         try:
             prompt_str = color("veno", "magenta", bold=True) + color(" > ", "green", bold=True)
@@ -323,4 +353,44 @@ def main():
                 config["output_dir"] = safe_path(value)
             elif option == "wordlist":
                 if not os.path.isfile(value):
-                    print(color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg
+                    print(color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg="black"))
+                    continue
+                config["wordlist"] = value
+            elif option == "domain":
+                if not validate_domain(value):
+                    print(color("[VENO] Invalid domain name.", "red", bold=True, bg="black"))
+                    continue
+                config["domain"] = value
+            elif option == "subscan":
+                config["subscan"] = value.lower() == "true"
+            elif option == "intensity":
+                merge_intensity(config, value)
+            else:
+                print(color(f"[VENO] Unknown option: {option}", "red", bold=True, bg="black"))
+        elif cmd == "run":
+            if not config.get("domain"):
+                print(color("[VENO] Please set a valid domain before running.", "red", bold=True, bg="black"))
+                continue
+            ensure_output_dirs(config)
+            ascii_loader(color("[VENO] Starting scan...", "yellow", bold=True), duration=1)
+            try:
+                full_scan(config)
+            except Exception as e:
+                print(color(f"[VENO] Scan failed: {e}", "red", bold=True, bg="black"))
+        elif cmd == "meme" and HAS_MEMES:
+            meme = get_ascii_meme()
+            if console:
+                console.print(meme)
+            else:
+                print(meme)
+        elif cmd == "insult" and HAS_MEMES:
+            insult = get_insult()
+            if console:
+                console.print(insult)
+            else:
+                print(insult)
+        else:
+            print(color(f"[VENO] Unknown command: {cmd}", "red", bold=True, bg="black"))
+
+if __name__ == "__main__":
+    main()
