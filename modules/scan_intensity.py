@@ -1,9 +1,8 @@
 """
-VENO Intensity Profiles
------------------------
+VENO Intensity Profiles — Now With Even More Fucking Attitude!
+-----------------------------------------------------
 Defines scan intensity presets for the VENO recon suite.
-Edit these bad boys if you want different wordlists, thread counts, or tool combos.
-
+Change these if you want to crank it up, tone it down, or just meme.
 """
 
 import os
@@ -19,10 +18,11 @@ def _check_wordlist(path):
         print(f"\033[1;33m[WARNING]\033[0m Wordlist not found: {path} — you might be about to eat shit!")
 
 SCAN_INTENSITIES = {
-    "fast": {
-        # Super quick, for when you just wanna spray and pray
+    "light": {
+        "description": "Light as fuck — fast, low-noise, skips heavy shit. For sneak peeks only.",
         "wordlist": "/usr/share/seclists/Discovery/Web-Content/quickhits.txt",
         "threads": 5,
+        "delay": 0.3,
         "run_subjack": False,
         "run_sqlmap": False,
         "run_waymore": False,
@@ -33,10 +33,11 @@ SCAN_INTENSITIES = {
         "dalfox": False,
         "xsstrike": False,
     },
-    "normal": {
-        # Your bread-and-butter scan, not too fast, not too slow
+    "medium": {
+        "description": "Medium (default): Balanced — solid bug bounty coverage, not too slow, not too cray.",
         "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt",
-        "threads": 20,
+        "threads": 16,
+        "delay": 0.8,
         "run_subjack": True,
         "run_sqlmap": True,
         "run_waymore": True,
@@ -47,10 +48,11 @@ SCAN_INTENSITIES = {
         "dalfox": True,
         "xsstrike": False,
     },
-    "deep": {
-        # For when you want to melt the target and your CPU
+    "heavy": {
+        "description": "Heavy as fuck — melt faces and CPUs. Full arsenal, full send.",
         "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt",
-        "threads": 50,
+        "threads": 40,
+        "delay": 1.8,
         "run_subjack": True,
         "run_sqlmap": True,
         "run_waymore": True,
@@ -61,12 +63,10 @@ SCAN_INTENSITIES = {
         "dalfox": True,
         "xsstrike": True,
     },
-    # Example: add your own custom profile here
-    # "your_custom_mode": {
-    #     "wordlist": "/path/to/your/wordlist.txt",
-    #     "threads": 100,
-    #     "run_subjack": True,
-    #     "run_sqlmap": True,
+    # Add your own custom intensity modes here!
+    # "your_custom_profile": {
+    #     "description": "Describe your meme mode.",
+    #     "wordlist": "/your/meme/list.txt",
     #     ...
     # }
 }
