@@ -135,7 +135,7 @@ def print_help():
         "        " + color("subscan", "yellow", bold=True) + "      - true/false to enable/disable subdomain scan",
         "        " + color("intensity", "yellow", bold=True) + "    - Scan profile (see below)",
         "      Example: set domain example.com",
-        "      Example: set intensity deep",
+        "      Example: set intensity medium",
         "      Example: set threads 50\n",
         "  " + color("run", "cyan", bold=True),
         "      Launches the full scan with the current config.",
@@ -164,7 +164,7 @@ def print_help():
     lines += [
         "\n  " + color("Example Usage:", "magenta", bold=True),
         "      set domain example.com",
-        "      set intensity normal",
+        "      set intensity medium",
         "      set threads 20",
         "      run\n"
     ]
@@ -280,7 +280,7 @@ def main():
     print_banner()
     print_usage()
 
-    default_intensity = "normal"
+    default_intensity = "medium"
     config = {
         "domain": "",
         "output_dir": "output",
