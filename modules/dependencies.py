@@ -1,8 +1,31 @@
 import shutil
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# ---- Try to match VENO's color/console system ----
+try:
+    from rich.console import Console
+    RICH_AVAILABLE = True
+    console = Console()
+except ImportError:
+    RICH_AVAILABLE = False
+    console = None
+
+def color(text, c, bold=False, bg=None):
+    codes = {'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32', 'red': '31', 'blue': '34', 'white': '37'}
+    if not RICH_AVAILABLE:
+        style = []
+        if bold: style.append('1')
+        if c in codes: style.append(codes[c])
+        if bg == 'black': style.append('40')
+        if not style: style = ['0']
+        return f"\033[{';'.join(style)}m{text}\033[0m"
+    tag = c
+    if bold: tag = f"bold {c}"
+    if bg: tag += f" on {bg}"
+    return f"[{tag}]{text}[/{tag}]"
 
 # ---- CONSTANTS ----
 TOOL_INSTALL_CMDS = {
@@ -45,13 +68,19 @@ def log_error(message, output_dir=None):
         f.write(message + "\n")
 
 def print_status(msg):
-    print(f"\033[1;36m[VENO]\033[0m {msg}")
+    m = color("[VENO]", "cyan", bold=True) + " " + color(msg, "white")
+    if console: console.print(m)
+    else: print(m)
 
 def print_success(msg):
-    print(f"\033[1;32m[\u2713]\033[0m {msg}")
+    m = color("[✓]", "green", bold=True) + " " + color(msg, "green")
+    if console: console.print(m)
+    else: print(m)
 
 def print_error(msg):
-    print(f"\033[1;31m[!]\033[0m {msg}")
+    m = color("[!]", "red", bold=True, bg="black") + " " + color(msg, "red", bold=True)
+    if console: console.print(m)
+    else: print(m)
 
 def check_tool(tool):
     """Check if a tool is available in PATH."""
@@ -92,7 +121,11 @@ def check_and_prompt_install(output_dir=None):
         return True
 
     print_error(f"Missing required tools: {', '.join(missing)}")
-    install_all = input(f"\033[1;33mInstall ALL missing tools automatically? (Y/n):\033[0m ").strip().lower()
+    if console:
+        install_all = console.input(color("Install ALL missing tools automatically? (Y/n):", "yellow", bold=True))
+    else:
+        install_all = input(color("Install ALL missing tools automatically? (Y/n):", "yellow", bold=True))
+    install_all = install_all.strip().lower()
     if install_all not in ["", "y", "yes"]:
         print_error("Required tools missing. Exiting.")
         sys.exit(1)
@@ -111,6 +144,6 @@ def check_and_prompt_install(output_dir=None):
 def check_dependencies(output_dir=None):
     """
     Main entry: checks and installs dependencies as needed.
-    Intended to be called from main.py.
+    Intended to be called from veno.py/main.py.
     """
     check_and_prompt_install(output_dir)
