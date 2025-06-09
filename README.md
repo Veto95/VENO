@@ -1,4 +1,5 @@
 ---  
+---
 
 ## VENO 🚀 — Automated Bug Hunting & Reconnaissance Suite   
 
@@ -126,7 +127,7 @@ MIT License
 ## ⚠️ Legal
 
 **VENO is for authorized security testing and research only. Always get explicit permission before scanning any system.**
-
+---
 ---
 
 **Happy Hunting!** 🐱‍💻
