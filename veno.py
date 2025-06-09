@@ -144,7 +144,7 @@ def print_help():
         "  " + color("timer", "cyan", bold=True),
         "      Show session elapsed time.",
         "  " + color("clear", "cyan", bold=True),
-        "      Clears the screen and reprints the VENO banner.",
+        "      Clears the screen .",
         "  " + color("help", "cyan", bold=True),
         "      Show this help message at any time.",
         "  " + color("exit, quit", "cyan", bold=True),
