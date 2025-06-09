@@ -4,7 +4,6 @@ import random
 
 def banner():
     version = "1.0"
-    # themed phrases
     phrases = [
         "Recon", "Scope", "Vulnerability", "Exploit", "Payload", "XSS",
         "SQLi", "LFI", "RCE", "SSRF", "Bypass", "Enumeration", "Fuzz",
@@ -13,7 +12,6 @@ def banner():
         "Hall of Fame", "Subdomain", "Takeover", "Responsible", "Ethical",
         "Duplicate", "Out of Scope", "Race Condition"
     ]
-    # Select 6 random unique words
     selected_phrases = random.sample(phrases, 6)
     phrase_lines = [
         f"    [*] {selected_phrases[0]} the Target | {selected_phrases[1]} Exposed | {selected_phrases[2]} Blitz",
@@ -61,11 +59,8 @@ def banner():
         type_effect(f"{red}{line}")
     type_effect(f"{reset}")
 
-if __name__ == "__main__":
-    banner()
-
 def get_banner_html():
-    return """
+    return r"""
 <pre style="color:#1e90ff;font-weight:bold;font-family:monospace">
  .-.   .-.,---.  .-. .-. .---.   
   \ \ / / | .-'  |  \| |/ .-. )  
