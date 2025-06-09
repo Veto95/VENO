@@ -4,6 +4,7 @@ import subprocess
 import time
 import hashlib
 import logging
+from modules.reporter import generate_report
 from modules.dependencies import check_dependencies, dependencies
 
 try:
@@ -413,39 +414,8 @@ def step_nuclei_chain(domain, config, context):
     context['nuclei_chained'] = nuclei_out
 
 def step_report(domain, config, context):
-    print_step("Generating HTML report")
-    outdir = config.get("output_dir") or "output"
-    html_report = f"{outdir}/{domain}/report.html"
-    banner_html = "<pre>VENO BANNER HERE</pre>"
-    with open(html_report, "w", encoding="utf-8") as fout:
-        html_code = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>VENO Report - {domain}</title>
-<style>
-pre {{ white-space: pre-wrap; word-break: break-word; background: #f9f9f9; padding:1em; border-radius:8px; }}
-</style>
-</head>
-<body>
-{banner_html}
-<h1>VENO Bug Bounty Report: {domain}</h1>
-<div>
-<b>Summary:</b>
-<ul>
-<li>Subdomains found: {len(context.get('subdomains', []))}</li>
-<li>Live subdomains: {len(context.get('live_subdomains', []))}</li>
-<li>Sensitive files: {len(context.get('sensitive_files', []))}</li>
-<li>Juicy info: {len(context.get('juicy', []))}</li>
-<li>Directory fuzzing: {len(context.get('dir_fuzz', []))}</li>
-<li>Vulnerable URLs: {len(context.get('vuln_urls', []))}</li>
-<li>Nuclei findings: {context.get('nuclei_chained', '')}</li>
-</ul>
-</div>
-<!-- Expand this section to include more detailed results -->
-</body></html>
-"""
-        fout.write(html_code)
+    print_step("Generating HTML report ")
+    generate_report(domain, config, context)
 
 scanner_steps = [
     step_check_dependencies,
