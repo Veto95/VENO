@@ -24,7 +24,7 @@ def banner():
         cyan = "\033[1;36m"
         red = "\033[1;31m"
         reset = "\033[0m"
-        delay = 0.03
+        delay = 0.005
     else:
         green = purple = cyan = red = reset = ""
         delay = 0
@@ -39,7 +39,7 @@ def banner():
             print(text)
 
     type_effect(f"{green}")
-    type_effect(r"""
+    print(r"""
  .-.   .-.,---.  .-. .-. .---.   
   \ \ / / | .-'  |  \| |/ .-. )  
    \ V /  | `-.  |   | || | |(_) 
@@ -48,13 +48,13 @@ def banner():
           /( __.'/(  (_) )---'   
          (__)   (__)    (_)     
     """)
-    type_effect(f"{purple}          VENO v{version}")
-    type_effect("     BUG BOUNTY & RECON TOOL")
-    type_effect(f"{reset}—-—-—-—-—-—-—-—-—-—-—-—-—-—-—")
+    print(f"{purple}          VENO v{version}")
+    print("     BUG BOUNTY & RECON TOOL")
+    type_effect(f"{reset}—-—-—-—-—-—-—-—-—-—-—-—-—-—-—--")
     type_effect(f"{cyan}    Coder: 0xCACT2S")
-    type_effect("    Telegram: HELL SHELL [https://t.me/hacking_hell1]")
-    type_effect("    Contact: [https://t.me/CACT2S]")
-    type_effect("    GitHub: https://github.com/Veto95/VENO")
+    print("    Telegram: HELL SHELL https://t.me/hacking_hell1")
+    print("    Contact: https://t.me/CACT2S")
+    print("    GitHub: https://github.com/Veto95/VENO")
     for line in phrase_lines:
         type_effect(f"{red}{line}")
     type_effect(f"{reset}")
