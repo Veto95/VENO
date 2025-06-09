@@ -63,18 +63,18 @@ def get_banner_html():
     return """
 <pre style="color:#1e90ff;font-weight:bold;font-family:monospace">
 .-.   .-.,---.  .-. .-. .---.   
- \\ \\ / / | .-'  |  \\| |/ .-. )  
-  \\ V /  | `-.  |   | || | |(_) 
-   ) /   | .-'  | |\\  || | | |  
-  (_)    |  `--.| | |)|\\ `-' /  
+ \ \ / / | .-'  |  \| |/ .-. )  
+  \ V /  | `-.  |   | || | |(_) 
+   ) /   | .-'  | |\  || | | |  
+  (_)    |  `--.| | |)|\ `-' /  
          /( __.'/(  (_) )---'   
-        (__)   (__)    (_)     
+        (__)   (__)    (_)    
 
-             VENO v1.0
+          print(f"{version}")
         BUG HUNTING & RECON TOOL
 
-         coder: 0xCACT2S (Veto95)
- Telegram: HELL SHELL [https://t.me/hacking_hell1]
-   GitHub: https://github.com/Veto95/VENO
+       Telegram: HELL SHELL [https://t.me/hacking_hell1]"
+    Contact: [https://t.me/CACT2S]")
+    GitHub: https://github.com/Veto95/VENO"
 </pre>
 """
