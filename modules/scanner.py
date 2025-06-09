@@ -1,5 +1,6 @@
 import logging
-from modules.scanner_steps import scanner_steps
+from modules.scanner_steps import run_scan, get_steps_for_intensity
+from modules.scan_intensity import SCAN_INTENSITIES, DEFAULT_OUTPUT_DIR
 
 try:
     from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
@@ -57,14 +58,23 @@ def print_success(msg):
 def full_scan(config):
     """
     Aligned with veno.py: expects a single config dict!
-    Executes scanner_steps. All output is colorized.
+    Executes adaptive scan steps according to intensity profile.
+    All output is colorized, memes supported.
     """
     domain = config.get("domain", "")
-    output_dir = config.get("output_dir", "output")
-    wordlist = config.get("wordlist", "")
-    threads = config.get("scan_config", {}).get("threads", 20)
-    subscan = config.get("subscan", True)
-    intensity = config.get("intensity", "normal")
+    intensity = config.get("intensity", "medium")
+    output_dir = config.get("output_dir", DEFAULT_OUTPUT_DIR)
+    profile = SCAN_INTENSITIES.get(intensity, SCAN_INTENSITIES["medium"])
+
+    # Merge config with intensity profile
+    merged_config = dict(profile)
+    merged_config.update(config)
+    merged_config["output_dir"] = output_dir
+    merged_config["intensity"] = intensity
+
+    wordlist = merged_config.get("wordlist", "")
+    threads = merged_config.get("threads", 20)
+    subscan = merged_config.get("subscan", True)
 
     if not domain:
         print_error("[VENO] Domain not set. Aborting scan.")
@@ -89,6 +99,9 @@ def full_scan(config):
     if HAS_MEMES:
         print_status(get_ascii_meme(), "yellow")
 
+    scanner_steps = get_steps_for_intensity(intensity)
+    total_steps = len(scanner_steps)
+
     if Progress:
         with Progress(
             TextColumn("[bold cyan]VENO[/bold cyan]", justify="right"),
@@ -98,12 +111,12 @@ def full_scan(config):
             console=console,
             transient=True
         ) as progress:
-            task = progress.add_task(f"[white]Scanning {domain}[/white]", total=len(scanner_steps))
+            task = progress.add_task(f"[white]Scanning {domain}[/white]", total=total_steps)
             for step in scanner_steps:
                 step_name = step_nice(step)
                 progress.console.print(color(f"> {step_name}...", "magenta"))
                 try:
-                    step(domain, config, context)
+                    step(domain, merged_config, context)
                 except Exception as e:
                     msg = f"[ERROR] Step '{step_name}' failed: {e}"
                     progress.console.print(color(msg, "red"))
@@ -115,7 +128,7 @@ def full_scan(config):
             step_name = step_nice(step)
             print_status(f"> {step_name}...", "magenta")
             try:
-                step(domain, config, context)
+                step(domain, merged_config, context)
             except Exception as e:
                 msg = f"[ERROR] Step '{step_name}' failed: {e}"
                 print_error(msg)
