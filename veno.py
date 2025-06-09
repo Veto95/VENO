@@ -24,8 +24,12 @@ except Exception as e:
 try:
     from modules.scanner import full_scan
 except Exception as e:
-    def full_scan(*args, **kwargs):
-        print(f"[!] Scanner module not available: {e}")
+    def full_scan(config):
+        err = f"[!] Scanner module not available: {e}"
+        if console:
+            console.print(f"[bold red on black]{err}[/bold red on black]")
+        else:
+            print(f"\033[1;31m{err}\033[0m")
 
 try:
     from modules.scan_intensity import SCAN_INTENSITIES
@@ -37,7 +41,11 @@ try:
     from modules.dependencies import check_dependencies
 except Exception as e:
     def check_dependencies():
-        print(f"[!] dependencies module not available: {e}")
+        err = f"[!] dependencies module not available: {e}"
+        if console:
+            console.print(f"[bold red on black]{err}[/bold red on black]")
+        else:
+            print(f"\033[1;31m{err}\033[0m")
 
 # Meme module (optional)
 try:
@@ -48,19 +56,6 @@ except ImportError:
     get_ascii_meme = lambda: "¯\\_(ツ)_/¯"
     get_insult = lambda: "No memes for you!"
 
-# CYBERPUNK COLOR PALETTE (ANSI/Rich)
-COLOR_PALETTE = {
-    "accent": "magenta",
-    "primary": "cyan",
-    "success": "green",
-    "warn": "yellow",
-    "fail": "red",
-    "info": "blue",
-    "white": "white",
-    "bold": "bold",
-}
-
-# CAT ASCII FRAMES for LOADER
 CAT_FRAMES = [
     r''' /\_/\  
  ( o.o )''',
@@ -76,7 +71,7 @@ CAT_FRAMES = [
  ( -.- )''',
 ]
 
-def ascii_loader(message, duration=2):
+def ascii_loader(message, duration=0.4):
     from time import sleep
     t_end = time.time() + duration
     i = 0
@@ -84,14 +79,13 @@ def ascii_loader(message, duration=2):
         frame = CAT_FRAMES[i % len(CAT_FRAMES)]
         sys.stdout.write(f"\r{message}\n{frame}\033[K")
         sys.stdout.flush()
-        sleep(0.19)
+        sleep(0.04)
         i += 1
         sys.stdout.write("\033[F" * 2)
     sys.stdout.write(f"\r{message}\n{CAT_FRAMES[0]}\n")
     sys.stdout.flush()
 
 def color(text, c, bold=False, bg=None):
-    # Centralized color function, always use this!
     if not RICH_AVAILABLE:
         codes = {
             'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32', 'red': '31', 'blue': '34', 'white': '37'
@@ -112,57 +106,56 @@ def print_banner():
         val = banner() if callable(banner) else banner
         val = str(val or '').strip()
         if val:
-            border = color("─" * 65, COLOR_PALETTE["accent"], bold=True)
             if console:
-                console.print(border)
-                console.print(color(val, COLOR_PALETTE["success"], bold=True))
-                console.print(border)
+                console.print(color(val, "green", bold=True))
             else:
-                print(border)
-                print(color(val, COLOR_PALETTE["success"], bold=True))
-                print(border)
+                print("\033[1;32m" + val + "\033[0m")
     except Exception as e:
-        print(color(f"[!] Failed to print banner: {e}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+        print(f"[!] Failed to print banner: {e}")
 
 def print_usage():
-    msg = color("[VENO]", COLOR_PALETTE["primary"], bold=True) + color(" Usage: set options, show options, run, help, clear, exit", "white")
-    tail = color("Type 'help' for full command details.\n", COLOR_PALETTE["accent"], bold=True)
-    if console: console.print(msg); console.print(tail)
-    else: print(msg); print(tail)
+    msg = color("[VENO]", "cyan", bold=True) + color(" Usage: set options, show options, run, help, clear, exit", "white")
+    tail = color("Type 'help' for full command details.\n", "magenta", bold=True)
+    if console:
+        console.print(msg)
+        console.print(tail)
+    else:
+        print(msg)
+        print(tail)
 
 def print_help():
     lines = [
-        "\n" + color("VENO Automated Recon Shell - Full Help", COLOR_PALETTE["accent"], bold=True) + "\n",
-        "  " + color("show options", COLOR_PALETTE["primary"], bold=True),
+        "\n" + color("VENO Automated Recon Shell - Full Help", "magenta", bold=True) + "\n",
+        "  " + color("show options", "cyan", bold=True),
         "      Prints all current settings and scan parameters.",
-        "  " + color("set <option> <value>", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("set <option> <value>", "cyan", bold=True),
         "      Set a scan option. Options include:",
-        "        " + color("domain", COLOR_PALETTE["warn"], bold=True) + "       - Target domain to scan (e.g. set domain example.com)",
-        "        " + color("output", COLOR_PALETTE["warn"], bold=True) + "       - Output directory for results (default: output)",
-        "        " + color("threads", COLOR_PALETTE["warn"], bold=True) + "      - Number of threads/tools to use (e.g. set threads 10)",
-        "        " + color("wordlist", COLOR_PALETTE["warn"], bold=True) + "     - Custom wordlist path for fuzzing/discovery",
-        "        " + color("subscan", COLOR_PALETTE["warn"], bold=True) + "      - true/false to enable/disable subdomain scan",
-        "        " + color("intensity", COLOR_PALETTE["warn"], bold=True) + "    - Scan profile (see below)",
+        "        " + color("domain", "yellow", bold=True) + "       - Target domain to scan (e.g. set domain example.com)",
+        "        " + color("output", "yellow", bold=True) + "       - Output directory for results (default: output)",
+        "        " + color("threads", "yellow", bold=True) + "      - Number of threads/tools to use (e.g. set threads 10)",
+        "        " + color("wordlist", "yellow", bold=True) + "     - Custom wordlist path for fuzzing/discovery",
+        "        " + color("subscan", "yellow", bold=True) + "      - true/false to enable/disable subdomain scan",
+        "        " + color("intensity", "yellow", bold=True) + "    - Scan profile (see below)",
         "      Example: set domain example.com",
         "      Example: set intensity deep",
         "      Example: set threads 50\n",
-        "  " + color("run", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("run", "cyan", bold=True),
         "      Launches the full scan with the current config.",
-        "  " + color("save config <filename>", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("save config <filename>", "cyan", bold=True),
         "      Saves current config to a file.",
-        "  " + color("load config <filename>", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("load config <filename>", "cyan", bold=True),
         "      Loads config from a file.",
-        "  " + color("timer", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("timer", "cyan", bold=True),
         "      Show session elapsed time.",
-        "  " + color("clear", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("clear", "cyan", bold=True),
         "      Clears the screen and reprints the VENO banner.",
-        "  " + color("help", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("help", "cyan", bold=True),
         "      Show this help message at any time.",
-        "  " + color("-h, --help", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("-h, --help", "cyan", bold=True),
         "      Show basic usage summary at any time.",
-        "  " + color("exit, quit", COLOR_PALETTE["primary"], bold=True),
+        "  " + color("exit, quit", "cyan", bold=True),
         "      Leave the shell.\n",
-        color("Scan Intensities (affect wordlist, tools, threads):", COLOR_PALETTE["accent"], bold=True) + "\n"
+        color("Scan Intensities (affect wordlist, tools, threads):", "magenta", bold=True) + "\n"
     ]
     for key, profile in SCAN_INTENSITIES.items():
         features = []
@@ -172,10 +165,10 @@ def print_help():
         if profile.get("run_sqlmap"): features.append("sqlmap")
         features_str = " | ".join(features)
         lines.append(
-            f"    {color(key, COLOR_PALETTE['warn'], bold=True)}: wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, threads={profile['threads'] if 'threads' in profile else 'N/A'}"
+            f"    {color(key, 'yellow', bold=True)}: wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, threads={profile['threads'] if 'threads' in profile else 'N/A'}"
             + (", " + features_str if features_str else ""))
     lines += [
-        "\n  " + color("Example Usage:", COLOR_PALETTE["accent"], bold=True),
+        "\n  " + color("Example Usage:", "magenta", bold=True),
         "      set domain example.com",
         "      set intensity normal",
         "      set threads 20",
@@ -189,20 +182,25 @@ def print_help():
             print(line)
 
 def show_options(config):
-    msg = color("\nCurrent VENO options:", COLOR_PALETTE["success"], bold=True)
-    if console: console.print(msg)
-    else: print(msg)
-    for k, v in config.items():
-        if isinstance(v, dict):
-            for sk, sv in v.items():
-                print(color(f"  {k}.{sk}: {sv}", COLOR_PALETTE["primary"]))
-        else:
-            print(color(f"  {k}: {v}", COLOR_PALETTE["primary"]))
-    print("")
+    msg = color("\nCurrent VENO options:", "green", bold=True)
+    if console:
+        console.print(msg)
+        for k, v in config.items():
+            if k == "scan_config":
+                continue
+            console.print(color(f"  {k}: {v}", "cyan"))
+        console.print("")
+    else:
+        print(msg)
+        for k, v in config.items():
+            if k == "scan_config":
+                continue
+            print(color(f"  {k}: {v}", "cyan"))
+        print("")
 
 def merge_intensity(config, intensity):
     if intensity not in SCAN_INTENSITIES:
-        msg = color(f"Unknown intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES)}", COLOR_PALETTE["fail"], bold=True, bg="black")
+        msg = color(f"Unknown intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES)}", "red", bold=True, bg="black")
         if console: console.print(msg)
         else: print(msg)
         return
@@ -228,15 +226,27 @@ def save_config(config, filename):
     try:
         filename = safe_path(filename)
         if os.path.exists(filename):
-            confirm = input(color(f"[VENO] {filename} exists. Overwrite? (y/N): ", COLOR_PALETTE["fail"], bold=True))
+            confirm = input(color(f"[VENO] {filename} exists. Overwrite? (y/N): ", "red", bold=True))
             if confirm.strip().lower() not in ("y", "yes"):
-                print(color("[VENO] Save cancelled.", COLOR_PALETTE["warn"], bold=True))
+                if console:
+                    console.print(color("[VENO] Save cancelled.", "yellow", bold=True))
+                else:
+                    print(color("[VENO] Save cancelled.", "yellow", bold=True))
                 return
+        to_save = config.copy()
+        if "scan_config" in to_save:
+            del to_save["scan_config"]
         with open(filename, 'w') as f:
-            json.dump(config, f, indent=2)
-        print(color(f"[VENO] Config saved to {filename}", COLOR_PALETTE["success"], bold=True))
+            json.dump(to_save, f, indent=2)
+        if console:
+            console.print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
+        else:
+            print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
     except Exception as e:
-        print(color(f"[VENO] Failed to save config: {e}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+        if console:
+            console.print(color(f"[VENO] Failed to save config: {e}", "red", bold=True, bg="black"))
+        else:
+            print(color(f"[VENO] Failed to save config: {e}", "red", bold=True, bg="black"))
 
 def load_config(config, filename):
     try:
@@ -245,9 +255,15 @@ def load_config(config, filename):
             loaded = json.load(f)
             config.clear()
             config.update(loaded)
-        print(color(f"[VENO] Config loaded from {filename}", COLOR_PALETTE["success"], bold=True))
+        if console:
+            console.print(color(f"[VENO] Config loaded from {filename}", "green", bold=True))
+        else:
+            print(color(f"[VENO] Config loaded from {filename}", "green", bold=True))
     except Exception as e:
-        print(color(f"[VENO] Failed to load config: {e}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+        if console:
+            console.print(color(f"[VENO] Failed to load config: {e}", "red", bold=True, bg="black"))
+        else:
+            print(color(f"[VENO] Failed to load config: {e}", "red", bold=True, bg="black"))
 
 def validate_domain(domain):
     pat = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$")
@@ -266,18 +282,22 @@ def main():
     session_start = time.time()
     try:
         check_dependencies()
-        msg = color("🔥 [VENO] ALL DEPENDENCIES SATISFIED! 🔥", COLOR_PALETTE["success"], bold=True, bg="black")
-        border = color("─" * 65, COLOR_PALETTE["accent"], bold=True)
+        msg = color("🔥 [VENO] ALL DEPENDENCIES SATISFIED! 🔥", "green", bold=True, bg="black")
+        border = color("─" * 65, "magenta", bold=True)
         if console:
             console.print(border)
             console.print(msg)
             console.print(border)
         else:
-            print(border)
+            print("\033[1;35m" + "─" * 65 + "\033[0m")
             print(msg)
-            print(border)
+            print("\033[1;35m" + "─" * 65 + "\033[0m")
     except Exception as e:
-        print(color(f"[VENO] Dependency check failed: {e}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+        err = color(f"[VENO] Dependency check failed: {e}", "red", bold=True, bg="black")
+        if console:
+            console.print(err)
+        else:
+            print(err)
         sys.exit(3)
 
     print_banner()
@@ -300,17 +320,18 @@ def main():
 
     while True:
         try:
-            prompt_str = color("veno", COLOR_PALETTE["accent"], bold=True) + color(" > ", COLOR_PALETTE["success"], bold=True)
+            prompt_str = color("veno", "magenta", bold=True) + color(" > ", "green", bold=True)
             if console:
                 cmd = Prompt.ask(prompt_str)
             else:
                 cmd = input(prompt_str)
             cmd = cmd.strip()
         except (EOFError, KeyboardInterrupt):
+            bye_msg = color("Bye.", "magenta", bold=True)
             if console:
-                console.print(color("Bye.", COLOR_PALETTE["accent"], bold=True))
+                console.print(bye_msg)
             else:
-                print(color("Bye.", COLOR_PALETTE["accent"], bold=True))
+                print(bye_msg)
             sys.exit(0)
 
         if not cmd:
@@ -318,10 +339,11 @@ def main():
         COMMAND_LOG.append(cmd)
 
         if cmd in ("exit", "quit"):
+            bye_msg = color("Bye.", "magenta", bold=True)
             if console:
-                console.print(color("Bye.", COLOR_PALETTE["accent"], bold=True))
+                console.print(bye_msg)
             else:
-                print(color("Bye.", COLOR_PALETTE["accent"], bold=True))
+                print(bye_msg)
             break
 
         elif cmd == "help":
@@ -341,40 +363,68 @@ def main():
             if filename:
                 save_config(config, filename)
             else:
-                print(color("[VENO] Usage: save config <filename>", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color("[VENO] Usage: save config <filename>", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
         elif cmd.startswith("load config "):
             _, _, filename = cmd.partition(" ")
             filename = filename.strip().split(" ", 1)[-1]
             if filename:
                 load_config(config, filename)
             else:
-                print(color("[VENO] Usage: load config <filename>", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color("[VENO] Usage: load config <filename>", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
         elif cmd == "timer":
             elapsed = time.time() - session_start
             mins, secs = divmod(int(elapsed), 60)
-            print(color(f"[VENO] Session time: {mins} min {secs} sec", COLOR_PALETTE["warn"], bold=True))
+            msg = color(f"[VENO] Session time: {mins} min {secs} sec", "yellow", bold=True)
+            if console:
+                console.print(msg)
+            else:
+                print(msg)
         elif cmd.startswith("set "):
             parts = cmd.split()
             if len(parts) < 3:
-                print(color("Usage: set <option> <value>", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color("Usage: set <option> <value>", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
                 continue
             option = parts[1]
             value = " ".join(parts[2:])
             if option == "threads":
                 if not validate_threads(value):
-                    print(color("[VENO] threads must be an integer between 1 and 1000", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                    err = color("[VENO] threads must be an integer between 1 and 1000", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
                     continue
                 config["scan_config"]["threads"] = int(value)
             elif option == "output":
                 config["output_dir"] = safe_path(value)
             elif option == "wordlist":
                 if not os.path.isfile(value):
-                    print(color(f"[VENO] Wordlist not found: {value}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                    err = color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
                     continue
                 config["wordlist"] = value
             elif option == "domain":
                 if not validate_domain(value):
-                    print(color("[VENO] Invalid domain name.", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                    err = color("[VENO] Invalid domain name.", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
                     continue
                 config["domain"] = value
             elif option == "subscan":
@@ -382,17 +432,29 @@ def main():
             elif option == "intensity":
                 merge_intensity(config, value)
             else:
-                print(color(f"[VENO] Unknown option: {option}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color(f"[VENO] Unknown option: {option}", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
         elif cmd == "run":
             if not config.get("domain"):
-                print(color("[VENO] Please set a valid domain before running.", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color("[VENO] Please set a valid domain before running.", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
                 continue
             ensure_output_dirs(config)
-            ascii_loader(color("[VENO] Starting scan...", COLOR_PALETTE["warn"], bold=True), duration=1)
+            ascii_loader(color("[VENO] Starting scan...", "yellow", bold=True), duration=0.4)
             try:
                 full_scan(config)
             except Exception as e:
-                print(color(f"[VENO] Scan failed: {e}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+                err = color(f"[VENO] Scan failed: {e}", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
         elif cmd == "meme" and HAS_MEMES:
             meme = get_ascii_meme()
             if console:
@@ -406,7 +468,11 @@ def main():
             else:
                 print(insult)
         else:
-            print(color(f"[VENO] Unknown command: {cmd}", COLOR_PALETTE["fail"], bold=True, bg="black"))
+            err = color(f"[VENO] Unknown command: {cmd}", "red", bold=True, bg="black")
+            if console:
+                console.print(err)
+            else:
+                print(err)
 
 if __name__ == "__main__":
     main()
