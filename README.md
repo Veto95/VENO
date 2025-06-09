@@ -1,22 +1,23 @@
+---
+
 # VENO 🚀 — Automated Bug Hunting & Reconnaissance Suite
 
-**VENO** is a modular, command-line driven toolkit for bug bounty hunters, penetration testers, and security researchers. It automates reconnaissance and vulnerability assessment, fetching domains, subdomains, URLs, and vulnerabilities, with robust filtering and professional reporting—all controlled from a colorful interactive shell.
+**VENO** is a modular, command-line driven toolkit for bug bounty hunters, penetration testers, and security researchers. It automates reconnaissance and vulnerability assessment, fetching domains, scanning for vulns, and delivering an HTML report.
 
 ---
 
-## 💥 What VENO Fetches and Does
+## 💥 What VENO Does
 
-- **Fetches Domains/Subdomains**: Collects domains from manual input, files, or external sources, validating them for accuracy.
-- **Cleans and Validates Domains**: Removes protocols, paths, and wildcards (e.g., `https://*.example.com` → `example.com`).
-- **Fetches Live Hosts**: Identifies active domains and subdomains.
-- **Fetches URLs and Endpoints**: Gathers historical and active URLs, including dynamic parameters.
-- **Fetches Secrets**: Extracts API keys, tokens, and secrets from URLs and JavaScript files.
-- **Scans for Vulnerabilities**: Detects XSS, SQL injection, misconfigurations, and more.
-- **Performs Directory Fuzzing**: Probes for hidden directories and files using custom or default wordlists.
-- **Checks WAF Protection**: Identifies WAF-protected domains for potential bypass testing.
-- **Filters False Positives**: Validates findings to reduce noise.
-- **Generates Reports**: Saves results, logs, and timestamps to `output/<domain>/`, including a professional HTML report.
-- **Customizes Scans**: Configures scan intensity (`fast`, `normal`, `deep`), thread concurrency, and subdomain scanning.
+- **Domain & Subdomain Discovery:** Collect targets from manual input, files, or external APIs. Cleans and validates domains.
+- **Live Host Discovery:** Find active domains and subs.
+- **URL & Endpoint Collection:** Gathers historical and active URLs, including dynamic params.
+- **Secrets Extraction:** Pull API keys, tokens, and secrets from URLs and JavaScript.
+- **Vulnerability Scanning:** XSS, SQLi, misconfig, and more—using top bug bounty tools.
+- **Directory Fuzzing:** Probe for hidden dirs/files with custom or default wordlists.
+- **WAF Detection:** Spots WAFs for bypass testing.
+- **False Positive Filtering:** Validates and de-noises findings automatically.
+- **Reporting:** Saves results, logs, and timestamps to `output/<domain>/`, including a **professional HTML dashboard**.
+- **Customizable:** Choose scan intensity (`fast`, `normal`, `deep`), set thread count, enable/disable subdomain scan, select wordlists and more.
 
 ---
 
@@ -32,9 +33,9 @@ cd VENO
 ### 2. Install Requirements
 
 - **Python**: 3.7+
-- **System Tools**: See [`requirements_tools.md`](requirements_tools.md)
-- **OS**: Linux or WSL recommended
-- **Tested distro**:kali linux,parrot os and ubuntu
+- **System Tools**: See [`requirements_tools.md`](requirements_tools.md) for 3rd-party tools (auto-installer included)
+- **OS**: Linux or WSL recommended  
+- **Tested on:** Kali Linux, Parrot OS, Ubuntu
 
 Install Python packages:
 
@@ -42,13 +43,26 @@ Install Python packages:
 pip install -r requirements.txt
 ```
 
-### 3. Launch the Shell
+### 3. Global Setup (Recommended)
+
+To make VENO globally available as `veno`:
 
 ```bash
+python setup.py
+```
+
+- If `veno` is already global, it launches instantly.
+- Otherwise, it sets up a global launcher (symlink/wrapper) so you can just type `veno` in any shell.
+
+### 4. Launch the Shell
+
+```bash
+veno
+# Or, if running locally:
 python veno.py
 ```
 
-You’ll get a colored interactive prompt:
+You’ll get an nteractive prompt:
 
 ```
 veno >
@@ -58,7 +72,7 @@ veno >
 
 ## 🕹 Usage Example
 
-Control everything with shell commands—no step-by-step wizard. Example session:
+Command-driven shell, no wizards, no bullshit. Example session:
 
 ```
 veno > set domain example.com
@@ -68,28 +82,30 @@ veno > show options
 veno > run
 ```
 
-### Commands
+### Core Commands
 
-- `set domain <target>`: Set target domain.
-- `set intensity <fast|normal|deep>`: Choose scan mode.
-- `set threads <number>`: Control concurrency.
-- `set wordlist <path>`: Custom wordlist for fuzzing.
-- `set subscan <true|false>`: Enable/disable subdomain scan.
-- `show options`: Show current config.
-- `run`: Start the full scan pipeline.
-- `help`: List all commands and options.
+- `set domain <target>` — Set target domain.
+- `set intensity <fast|normal|deep>` — Choose scan mode.
+- `set threads <number>` — Tune concurrency.
+- `set wordlist <path>` — Custom wordlist for fuzzing.
+- `set subscan <true|false>` — Enable/disable subdomain scan.
+- `show options` — Show current config.
+- `run` — Start the full scan pipeline.
+- `help` — List all commands and options.
+- `exit` / `quit` — Leave the shell.
 
 ---
 
 ## 📦 Output
 
-Results, logs, and HTML report in `output/<domain>/`.
+All results, logs, and your sexy HTML report will appear in `output/<domain>/`.
 
 ---
 
 ## 🛠 System Tools
 
-See [`requirements_tools.md`](requirements_tools.md) for required tools.
+See [`requirements_tools.md`](requirements_tools.md) for a full list.  
+**Don’t worry:** missing tools are auto-detected and the installer will guide you!
 
 ---
 
@@ -97,6 +113,7 @@ See [`requirements_tools.md`](requirements_tools.md) for required tools.
 
 - **Telegram Channel:** [HELL SHELL](https://t.me/hacking_hell1)
 - **Telegram Contact:** [0xCACT2S](https://t.me/CACT2S)
+- **GitHub:** [github.com/Veto95/VENO](https://github.com/Veto95/VENO)
 
 ---
 
@@ -113,4 +130,5 @@ MIT License
 ---
 
 **Happy Hunting!** 🐱‍💻
-```
+
+---
