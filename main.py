@@ -51,17 +51,17 @@ except ImportError:
 # CAT ASCII FRAMES for LOADER
 CAT_FRAMES = [
     r''' /\_/\  
-( o.o )''',
+ ( o.o )''',
     r''' /\_/\  
-( -.- )''',
+ ( -.- )''',
     r''' /\_/\  
-( o.o )''',
+ ( o.o )''',
     r''' /\_/\  
-( -.- )~''',
+ ( -.- )~''',
     r''' /\_/\  
-( o.o )~''',
+ ( o.o )~''',
     r''' /\_/\  
-( -.- )''',
+ ( -.- )''',
 ]
 
 def ascii_loader(message, duration=2):
@@ -79,7 +79,6 @@ def ascii_loader(message, duration=2):
     sys.stdout.flush()
 
 def color(text, c, bold=False, bg=None):
-    # c: color name ('red','green',etc), bold: True/False, bg: background color ('black',etc)
     if not RICH_AVAILABLE:
         codes = {
             'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32', 'red': '31', 'blue': '34', 'white': '37'
@@ -297,7 +296,10 @@ def main():
                 cmd = input(prompt_str)
             cmd = cmd.strip()
         except (EOFError, KeyboardInterrupt):
-            print(color("\nExiting VENO.", "magenta", bold=True))
+            if console:
+                console.print("[bold magenta]Bye.[/bold magenta]")
+            else:
+                print("\033[1;35mBye.\033[0m")
             sys.exit(0)
 
         if not cmd:
@@ -305,7 +307,10 @@ def main():
         COMMAND_LOG.append(cmd)
 
         if cmd in ("exit", "quit"):
-            print(color("Bye.", "magenta", bold=True))
+            if console:
+                console.print("[bold magenta]Bye.[/bold magenta]")
+            else:
+                print("\033[1;35mBye.\033[0m")
             break
 
         elif cmd == "help":
