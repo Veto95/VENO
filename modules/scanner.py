@@ -1,3 +1,4 @@
+import os
 import logging
 from modules.scanner_steps import run_scan, get_steps_for_intensity
 from modules.scan_intensity import SCAN_INTENSITIES, DEFAULT_OUTPUT_DIR
@@ -55,47 +56,59 @@ def print_success(msg):
     else:
         print(color(msg, "green", bold=True))
 
-def full_scan(config):
+def run_scanner(domain, config_overrides=None, context=None):
     """
-    Aligned with veno.py: expects a single config dict!
-    Executes adaptive scan steps according to intensity profile.
-    All output is colorized, memes supported.
+    Run a VENO scan on a domain with optional config overrides.
+    :param domain: Target domain, e.g. 'example.com'
+    :param config_overrides: dict of config overrides (e.g., {'intensity': 'heavy', 'output_dir': '/tmp/x'})
+    :param context: optional dict for scan context (default: new dict)
     """
-    domain = config.get("domain", "")
-    intensity = config.get("intensity", "medium")
-    output_dir = config.get("output_dir", DEFAULT_OUTPUT_DIR)
-    profile = SCAN_INTENSITIES.get(intensity, SCAN_INTENSITIES["medium"])
+    if config_overrides is None:
+        config_overrides = {}
+    if context is None:
+        context = {}
 
-    # Merge config with intensity profile
-    merged_config = dict(profile)
-    merged_config.update(config)
-    merged_config["output_dir"] = output_dir
-    merged_config["intensity"] = intensity
+    intensity = config_overrides.get("intensity", "medium")
+    if intensity not in SCAN_INTENSITIES:
+        raise ValueError(
+            f"Unknown intensity profile: {intensity} (options: {list(SCAN_INTENSITIES.keys())})"
+        )
+    profile = SCAN_INTENSITIES[intensity]
+    config = dict(profile)  # Copy to allow override
 
-    wordlist = merged_config.get("wordlist", "")
-    threads = merged_config.get("threads", 20)
-    subscan = merged_config.get("subscan", True)
+    # Apply overrides from the caller/main
+    config["output_dir"] = config_overrides.get("output_dir", DEFAULT_OUTPUT_DIR)
+    config["intensity"] = intensity
+    if "wordlist" in config_overrides:
+        config["wordlist"] = config_overrides["wordlist"]
+    if "threads" in config_overrides:
+        config["threads"] = config_overrides["threads"]
+    if "subscan" in config_overrides:
+        config["subscan"] = config_overrides["subscan"]
 
-    if not domain:
-        print_error("[VENO] Domain not set. Aborting scan.")
-        return
+    print(f"\n[VENO] Target: {domain}")
+    print(f"[VENO] Intensity profile: {intensity} — {profile.get('description', '')}")
+    print(f"[VENO] Output dir: {config['output_dir']}")
+    print(f"[VENO] Wordlist: {config['wordlist']}")
+    print(f"[VENO] Threads: {config['threads']}\n")
+
+    os.makedirs(config["output_dir"], exist_ok=True)
 
     print_status(f"[VENO] Starting scan for: {domain}", "yellow")
-    print_status(f" - Output directory: {output_dir}", "magenta")
-    print_status(f" - Wordlist: {wordlist}", "cyan")
-    print_status(f" - Threads: {threads}", "blue")
-    print_status(f" - Subdomain scan: {'enabled' if subscan else 'disabled'}", "green")
+    print_status(f" - Output directory: {config['output_dir']}", "magenta")
+    print_status(f" - Wordlist: {config['wordlist']}", "cyan")
+    print_status(f" - Threads: {config['threads']}", "blue")
+    print_status(f" - Subdomain scan: {'enabled' if config.get('subscan', True) else 'disabled'}", "green")
     print_status(f" - Intensity: {intensity}", "yellow")
     print_status("-" * 65, "magenta")
 
-    logging.info(f"[VENO] Starting full scan for {domain}")
-    context = {}
+    logging.info(f"[VENO] Starting scan for {domain}")
+
     failures = []
 
     def step_nice(step):
         return step.__name__.replace("step_", "").replace("_", " ").title()
 
-    # Pre-scan meme
     if HAS_MEMES:
         print_status(get_ascii_meme(), "yellow")
 
@@ -116,7 +129,7 @@ def full_scan(config):
                 step_name = step_nice(step)
                 progress.console.print(color(f"> {step_name}...", "magenta"))
                 try:
-                    step(domain, merged_config, context)
+                    step(domain, config, context)
                 except Exception as e:
                     msg = f"[ERROR] Step '{step_name}' failed: {e}"
                     progress.console.print(color(msg, "red"))
@@ -128,7 +141,7 @@ def full_scan(config):
             step_name = step_nice(step)
             print_status(f"> {step_name}...", "magenta")
             try:
-                step(domain, merged_config, context)
+                step(domain, config, context)
             except Exception as e:
                 msg = f"[ERROR] Step '{step_name}' failed: {e}"
                 print_error(msg)
@@ -142,11 +155,10 @@ def full_scan(config):
     else:
         print_success("All scan steps completed successfully!")
 
-    # End-of-scan meme/insult
     if HAS_MEMES:
         print_status(get_insult(), "magenta")
         print_status(get_ascii_meme(), "green")
 
-    logging.info(f"[VENO] Full scan completed for {domain}")
+    logging.info(f"[VENO] Scan complete for {domain}")
     context["failures"] = failures
     return context
