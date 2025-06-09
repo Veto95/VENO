@@ -7,28 +7,36 @@ import time
 import re
 
 try:
-    import readline  # for colored prompt/history if available
+    from rich.console import Console
+    from rich.prompt import Prompt
+    RICH_AVAILABLE = True
+    console = Console()
 except ImportError:
-    pass
+    RICH_AVAILABLE = False
+    console = None
 
-from modules.banner import banner # Can be string or function!
+from modules.banner import banner
 from modules.scanner import full_scan
 from modules.scan_intensity import SCAN_INTENSITIES
 from modules.dependencies import check_dependencies
 
-# --- ASCII Loader Animation (Toggled by user) ---
+# Meme module (optional)
+try:
+    from modules.memes import get_ascii_meme, get_insult
+    HAS_MEMES = True
+except ImportError:
+    HAS_MEMES = False
+
 ASCII_ANIM_ENABLED = True
 ASCII_FRAMES = [
     "🐍    ", " 🐍   ", "  🐍  ", "   🐍 ", "    🐍", "   🐍 ", "  🐍  ", " 🐍   "
 ]
 
 def ascii_loader(message, duration=2):
-    # Only runs if enabled
     if not ASCII_ANIM_ENABLED:
         print(message)
         return
     from time import sleep
-    import sys
     t_end = time.time() + duration
     i = 0
     while time.time() < t_end:
@@ -40,58 +48,72 @@ def ascii_loader(message, duration=2):
     sys.stdout.write(f"\r{message}        \n")
     sys.stdout.flush()
 
-# --- Color helpers ---
 def color(text, c):
-    colors = {
-        'cyan': '\033[1;36m', 'magenta': '\033[1;35m', 'yellow': '\033[1;33m',
-        'green': '\033[1;32m', 'red': '\033[1;31m', 'reset': '\033[0m', 
-        'blue': '\033[1;34m', 'bold': '\033[1m'
-    }
-    return f"{colors.get(c, '')}{text}{colors['reset']}"
+    if not RICH_AVAILABLE:
+        colors = {
+            'cyan': '\033[1;36m', 'magenta': '\033[1;35m', 'yellow': '\033[1;33m',
+            'green': '\033[1;32m', 'red': '\033[1;31m', 'reset': '\033[0m', 
+            'blue': '\033[1;34m', 'bold': '\033[1m'
+        }
+        return f"{colors.get(c, '')}{text}{colors['reset']}"
+    return f"[{c}]{text}[/{c}]"
+
+def safe_path(path):
+    return re.sub(r'[^A-Za-z0-9_\-\.\/]', '', path)
 
 def print_banner():
-    print(banner() if callable(banner) else banner)
+    if console:
+        console.print(banner() if callable(banner) else banner)
+    else:
+        print(banner() if callable(banner) else banner)
 
 def print_usage():
-    print(color("[VENO]", "magenta") + " Usage: set options, show options, run, help, update, clear, exit")
-    print("Type " + color("'help'", "cyan") + " for full command details.\n")
+    msg = color("[VENO]", "magenta") + " Usage: set options, show options, run, help, update, clear, exit"
+    if console:
+        console.print(msg)
+        console.print("Type " + color("'help'", "cyan") + " for full command details.\n")
+    else:
+        print(msg)
+        print("Type " + color("'help'", "cyan") + " for full command details.\n")
 
 def print_help():
-    print("\n" + color("VENO Automated Recon Shell - Full Help", "magenta") + "\n")
-    print("  " + color("show options", "cyan"))
-    print("      Prints all current settings and scan parameters.")
-    print("  " + color("set <option> <value>", "cyan"))
-    print("      Set a scan option. Options include:")
-    print("        " + color("domain", "yellow") + "       - Target domain to scan (e.g. set domain example.com)")
-    print("        " + color("output", "yellow") + "       - Output directory for results (default: output)")
-    print("        " + color("threads", "yellow") + "      - Number of threads/tools to use (e.g. set threads 10)")
-    print("        " + color("wordlist", "yellow") + "     - Custom wordlist path for fuzzing/discovery")
-    print("        " + color("subscan", "yellow") + "      - true/false to enable/disable subdomain scan")
-    print("        " + color("intensity", "yellow") + "    - Scan profile (see below)")
-    print("      Example: set domain example.com")
-    print("      Example: set intensity deep")
-    print("      Example: set threads 50\n")
-    print("  " + color("run", "cyan"))
-    print("      Launches the full scan with the current config. Results and report will be saved to your output directory.")
-    print("  " + color("update", "cyan"))
-    print("      Updates VENO to the latest version using git and pip.")
-    print("  " + color("save config <filename>", "cyan"))
-    print("      Saves current config to a file.")
-    print("  " + color("load config <filename>", "cyan"))
-    print("      Loads config from a file.")
-    print("  " + color("toggle ascii", "cyan"))
-    print("      Enable/disable ASCII loader animation for long ops.")
-    print("  " + color("timer", "cyan"))
-    print("      Show session elapsed time.")
-    print("  " + color("clear", "cyan"))
-    print("      Clears the screen and reprints the VENO banner.")
-    print("  " + color("help", "cyan"))
-    print("      Show this help message at any time.")
-    print("  " + color("-h, --help", "cyan"))
-    print("      Show basic usage summary at any time.")
-    print("  " + color("exit, quit", "cyan"))
-    print("      Leave the shell.\n")
-    print(color("Scan Intensities (affect wordlist, tools, threads):", "magenta") + "\n")
+    lines = [
+        "\n" + color("VENO Automated Recon Shell - Full Help", "magenta") + "\n",
+        "  " + color("show options", "cyan"),
+        "      Prints all current settings and scan parameters.",
+        "  " + color("set <option> <value>", "cyan"),
+        "      Set a scan option. Options include:",
+        "        " + color("domain", "yellow") + "       - Target domain to scan (e.g. set domain example.com)",
+        "        " + color("output", "yellow") + "       - Output directory for results (default: output)",
+        "        " + color("threads", "yellow") + "      - Number of threads/tools to use (e.g. set threads 10)",
+        "        " + color("wordlist", "yellow") + "     - Custom wordlist path for fuzzing/discovery",
+        "        " + color("subscan", "yellow") + "      - true/false to enable/disable subdomain scan",
+        "        " + color("intensity", "yellow") + "    - Scan profile (see below)",
+        "      Example: set domain example.com",
+        "      Example: set intensity deep",
+        "      Example: set threads 50\n",
+        "  " + color("run", "cyan"),
+        "      Launches the full scan with the current config. Results and report will be saved to your output directory.",
+        "  " + color("update", "cyan"),
+        "      Updates VENO to the latest version using git and pip.",
+        "  " + color("save config <filename>", "cyan"),
+        "      Saves current config to a file.",
+        "  " + color("load config <filename>", "cyan"),
+        "      Loads config from a file.",
+        "  " + color("toggle ascii", "cyan"),
+        "      Enable/disable ASCII loader animation for long ops.",
+        "  " + color("timer", "cyan"),
+        "      Show session elapsed time.",
+        "  " + color("clear", "cyan"),
+        "      Clears the screen and reprints the VENO banner.",
+        "  " + color("help", "cyan"),
+        "      Show this help message at any time.",
+        "  " + color("-h, --help", "cyan"),
+        "      Show basic usage summary at any time.",
+        "  " + color("exit, quit", "cyan"),
+        "      Leave the shell.\n",
+        color("Scan Intensities (affect wordlist, tools, threads):", "magenta") + "\n"
+    ]
     for key, profile in SCAN_INTENSITIES.items():
         features = []
         if profile.get("run_nuclei_full"): features.append("extended nuclei")
@@ -99,16 +121,28 @@ def print_help():
         if profile.get("xsstrike"): features.append("xsstrike")
         if profile.get("run_sqlmap"): features.append("sqlmap")
         features_str = " | ".join(features)
-        print(f"    {color(key, 'yellow')}: wordlist={profile['wordlist'].split('/')[-1]}, threads={profile['threads']}" +
-              (", " + features_str if features_str else ""))
-    print("\n  " + color("Example Usage:", "magenta"))
-    print("      set domain example.com")
-    print("      set intensity normal")
-    print("      set threads 20")
-    print("      run\n")
+        lines.append(
+            f"    {color(key, 'yellow')}: wordlist={os.path.basename(profile['wordlist'])}, threads={profile['threads']}" +
+            (", " + features_str if features_str else ""))
+    lines += [
+        "\n  " + color("Example Usage:", "magenta"),
+        "      set domain example.com",
+        "      set intensity normal",
+        "      set threads 20",
+        "      run\n"
+    ]
+    if console:
+        for line in lines:
+            console.print(line)
+    else:
+        for line in lines:
+            print(line)
 
 def show_options(config):
-    print("\nCurrent VENO options:")
+    if console:
+        console.print("\nCurrent VENO options:")
+    else:
+        print("\nCurrent VENO options:")
     for k, v in config.items():
         if isinstance(v, dict):
             for sk, sv in v.items():
@@ -119,25 +153,40 @@ def show_options(config):
 
 def merge_intensity(config, intensity):
     if intensity not in SCAN_INTENSITIES:
-        print(color(f"Unknown intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES)}", "red"))
+        msg = color(f"Unknown intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES)}", "red")
+        if console:
+            console.print(msg)
+        else:
+            print(msg)
         return
     profile = SCAN_INTENSITIES[intensity]
     config["intensity"] = intensity
     config["wordlist"] = profile["wordlist"]
     config["scan_config"]["threads"] = profile["threads"]
     for key in profile:
-        if key in ("wordlist", "threads"):
-            continue
+        if key in ("wordlist", "threads"): continue
         config["scan_config"][key] = profile[key]
 
 def update_veno():
-    print("\n" + color("[VENO] Updating...", "cyan"))
+    if console:
+        console.print(color("[VENO] Updating...", "cyan"))
+    else:
+        print(color("[VENO] Updating...", "cyan"))
     try:
-        subprocess.run(['git', 'pull'], check=True)
-        subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '-r', 'requirements.txt'], check=True)
-        print(color("[VENO] Update complete! Please restart VENO if libraries were upgraded.", "green") + "\n")
+        subprocess.run(['git', 'pull'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '-r', 'requirements.txt'],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        msg = color("[VENO] Update complete! Please restart VENO if libraries were upgraded.", "green") + "\n"
+        if console:
+            console.print(msg)
+        else:
+            print(msg)
     except Exception as e:
-        print(color(f"[VENO] Update failed: {e}", "red") + "\n")
+        msg = color(f"[VENO] Update failed: {e}", "red") + "\n"
+        if console:
+            console.print(msg)
+        else:
+            print(msg)
 
 def ensure_output_dirs(config):
     domain = config.get("domain")
@@ -148,6 +197,12 @@ def ensure_output_dirs(config):
 
 def save_config(config, filename):
     try:
+        filename = safe_path(filename)
+        if os.path.exists(filename):
+            confirm = input(color(f"[VENO] {filename} exists. Overwrite? (y/N): ", "red"))
+            if confirm.strip().lower() not in ("y", "yes"):
+                print(color("[VENO] Save cancelled.", "yellow"))
+                return
         with open(filename, 'w') as f:
             json.dump(config, f, indent=2)
         print(color(f"[VENO] Config saved to {filename}", "green"))
@@ -156,6 +211,7 @@ def save_config(config, filename):
 
 def load_config(config, filename):
     try:
+        filename = safe_path(filename)
         with open(filename, 'r') as f:
             loaded = json.load(f)
             config.clear()
@@ -165,7 +221,6 @@ def load_config(config, filename):
         print(color(f"[VENO] Failed to load config: {e}", "red"))
 
 def validate_domain(domain):
-    # Accepts FQDNs, subdomains, not IPs
     pat = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$")
     return bool(pat.match(domain))
 
@@ -176,11 +231,11 @@ def validate_threads(threads):
     except Exception:
         return False
 
-def main():
-    # --- Session Timer ---
-    session_start = time.time()
+# Command history for session logging
+COMMAND_LOG = []
 
-    # --- Self-update prompt ---
+def main():
+    session_start = time.time()
     try:
         check_dependencies()
         print(color("[✓] All required tools are installed.", "green"))
@@ -213,13 +268,18 @@ def main():
     while True:
         try:
             prompt_str = color("veno", "magenta") + color(" > ", "cyan")
-            cmd = input(prompt_str).strip()
+            if console:
+                cmd = Prompt.ask(prompt_str)
+            else:
+                cmd = input(prompt_str)
+            cmd = cmd.strip()
         except (EOFError, KeyboardInterrupt):
             print("\nExiting VENO.")
             sys.exit(0)
 
         if not cmd:
             continue
+        COMMAND_LOG.append(cmd)
 
         if cmd in ("exit", "quit"):
             print("Bye.")
@@ -236,6 +296,7 @@ def main():
         elif cmd == "clear":
             os.system('cls' if os.name == 'nt' else 'clear')
             print_banner()
+            continue  # Immediately re-prompts after clear
         elif cmd.startswith("save config "):
             _, _, filename = cmd.partition(" ")
             filename = filename.strip().split(" ", 1)[-1]
@@ -270,8 +331,11 @@ def main():
                     continue
                 config["scan_config"]["threads"] = int(value)
             elif option == "output":
-                config["output_dir"] = value
+                config["output_dir"] = safe_path(value)
             elif option == "wordlist":
+                if not os.path.isfile(value):
+                    print(color(f"[VENO] Wordlist not found: {value}", "red"))
+                    continue
                 config["wordlist"] = value
             elif option == "domain":
                 if not validate_domain(value):
@@ -297,17 +361,35 @@ def main():
                     level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s"
                 )
+                # Pre-scan meme
+                if HAS_MEMES:
+                    print(color(get_ascii_meme(), "yellow"))
                 print(color(f"[VENO] Starting full scan for {domain} (intensity: {config['intensity']})", "magenta"))
                 ascii_loader("[VENO] Starting scan..." if ASCII_ANIM_ENABLED else "[VENO] Scan running...", duration=2)
-                full_scan(domain, config)
+                result = full_scan(domain, config)
                 print(color(f"[VENO] Scan completed for {domain}", "green"))
                 print(color(f"Report: {os.path.join(config['output_dir'], domain, 'report.html')}", "yellow"))
+                # Print failures summary if any
+                if "failures" in result and result["failures"]:
+                    print(color("[VENO] Some scan steps failed:", "red"))
+                    for step, err in result["failures"]:
+                        print(color(f"  {step}: {err}", "red"))
+                # Post-scan meme/insult
+                if HAS_MEMES:
+                    print(color(get_insult(), "magenta"))
+                    print(color(get_ascii_meme(), "green"))
             except KeyboardInterrupt:
                 print(color("[VENO] Scan interrupted by user!", "red"))
                 sys.exit(1)
             except Exception as e:
+                log_path = os.path.join(config['output_dir'], domain, "veno.log")
                 print(color(f"[VENO] Fatal error: {e}", "red"))
+                print(color(f"[VENO] See log for details: {log_path}", "yellow"))
                 sys.exit(2)
+        elif cmd == "history":
+            print(color("[VENO] Session command history:", "cyan"))
+            for h in COMMAND_LOG:
+                print("  " + h)
         else:
             print(color("Unknown command. Type '-h' for usage or 'help' for full command details.", "red"))
 
