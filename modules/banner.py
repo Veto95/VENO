@@ -4,13 +4,13 @@ import random
 
 def banner():
     version = "1.0"
-    hacker_phrases = [
+    phrases = [
         "Exploit", "Payload", "Zero-Day", "Pwn", "Hack", "Breach",
         "Shellcode", "Rootkit", "Backdoor", "Crack", "Fuzz", "Inject",
         "Phreak", "Skid", "Overload", "Bypass", "Sniff", "Dump"
     ]
     # Select 6 random phrases, ensure uniqueness
-    selected_phrases = random.sample(hacker_phrases, 6)
+    selected_phrases = random.sample(phrases, 6)
     phrase_lines = [
         f"    [*] {selected_phrases[0]} the Void | {selected_phrases[1]} Unleashed | {selected_phrases[2]} Blitz",
         f"    [*] {selected_phrases[3]} Surge | {selected_phrases[4]} the Core | {selected_phrases[5]} Chaos"
