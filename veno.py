@@ -21,9 +21,9 @@ except Exception as e:
     banner = lambda: f"[!] Failed to load banner module: {e}"
 
 try:
-    from modules.scanner import full_scan
+    from modules.scanner import run_scanner
 except Exception as e:
-    def full_scan(config):
+    def run_scanner(domain, config, context=None):
         err = f"[!] Scanner module not available: {e}"
         if console:
             console.print(f"[bold red on black]{err}[/bold red on black]")
@@ -412,7 +412,7 @@ def main():
             ensure_output_dirs(config)
             ascii_loader(color("[VENO] Starting scan...", "yellow", bold=True), duration=0.4)
             try:
-                full_scan(config)
+                run_scanner(config["domain"], config)
             except Exception as e:
                 err = color(f"[VENO] Scan failed: {e}", "red", bold=True, bg="black")
                 if console:
