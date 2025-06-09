@@ -45,7 +45,7 @@ pip install -r requirements.txt
 ### 3. Launch the Shell
 
 ```bash
-python main.py
+python veno.py
 ```
 
 You’ll get a colored interactive prompt:
