@@ -136,7 +136,7 @@ def step_subdomain_enum(domain, config, context):
         with open(subfinder_out, "r", encoding='utf-8') as f:
             subs.update(line.strip() for line in f if line.strip())
 
-    sources = ["bing", "google"]
+    sources = ["certspotter", "crtsh","anubis"]
     for source in sources:
         random_delay(intensity)
         proxy = get_proxy()
