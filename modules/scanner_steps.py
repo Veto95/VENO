@@ -59,36 +59,18 @@ def get_random_user_agent():
 
 def get_proxy():
     proxies = [
-        # Add your proxies here, e.g., {"http": "http://127.0.0.1:8080", "https": "http://127.0.0.1:8080"}
+        # Add your proxies here if needed like {"http": "http://127.0.0.1:8080", "https": "http://127.0.0.1:8080"}
     ]
     return random.choice(proxies) if proxies else None
 
 def random_delay(intensity):
+    # Intensity: light=0.2-0.6, medium=0.6-1.5, heavy=1-3
     if intensity == "light":
         time.sleep(random.uniform(0.2, 0.6))
     elif intensity == "medium":
         time.sleep(random.uniform(0.6, 1.5))
     else:
         time.sleep(random.uniform(1, 3))
-
-def run_command(cmd, timeout, error_log, capture_output=False):
-    """Run subprocess command with error logging and stderr capture."""
-    try:
-        result = subprocess.run(
-            cmd,
-            check=True,
-            timeout=timeout,
-            stdout=subprocess.PIPE if capture_output else subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        return result.stdout if capture_output else None
-    except subprocess.SubprocessError as e:
-        error_msg = f"Command {cmd} failed: {e}\nStderr: {e.stderr if hasattr(e, 'stderr') else 'N/A'}"
-        with open(error_log, "a") as ferr:
-            ferr.write(error_msg + "\n")
-        logger.error(error_msg)
-        return None
 
 def step_check_dependencies(domain, config, context):
     print_step("Checking dependencies")
@@ -116,23 +98,29 @@ def step_subdomain_enum(domain, config, context):
     all_subs_out = os.path.join(domain_dir, "all_subdomains.txt")
     live_out = os.path.join(domain_dir, "live_subdomains.txt")
     error_log = os.path.join(domain_dir, "errors.log")
-
     # Subfinder
-    random_delay(intensity)
-    run_command(
-        ["subfinder", "-silent", "-d", domain, "-o", subfinder_out, "-t", "10", "-timeout", "5"],
-        timeout=180,
-        error_log=error_log
-    )
-
-    # theHarvester with limited sources
-    random_delay(intensity)
-    proxy = get_proxy()
-    cmd = ["theHarvester", "-d", domain, "-b", "bing,dnsdumpster", "-f", harvester_out]
-    if proxy:
-        cmd.extend(["--proxy", proxy.get("http")])
-    run_command(cmd, timeout=300, error_log=error_log)
-
+    try:
+        random_delay(intensity)
+        subprocess.run(
+            ["subfinder", "-silent", "-d", domain, "-o", subfinder_out, "-t", "10", "-timeout", "5"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180
+        )
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"subfinder failed: {e}\n")
+        logger.error(f"subfinder failed: {e}")
+    # theHarvester
+    try:
+        random_delay(intensity)
+        proxy = get_proxy()
+        cmd = ["theHarvester", "-d", domain, "-b", "all", "-f", harvester_out]
+        if proxy:
+            cmd.extend(["--proxy", proxy.get("http")])
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"theHarvester failed: {e}\n")
+        logger.error(f"theHarvester failed: {e}")
     # Combine subdomains
     subs = set()
     if os.path.isfile(subfinder_out):
@@ -148,26 +136,21 @@ def step_subdomain_enum(domain, config, context):
             with open(error_log, "a") as ferr:
                 ferr.write(f"Parse theHarvester failed: {e}\n")
             logger.error(f"Parse theHarvester failed: {e}")
-
     with open(all_subs_out, "w") as f:
         for s in sorted(subs):
             f.write(f"{s}\n")
     context['subdomains'] = list(subs)
     print_found("Subdomains", len(subs))
-
     # Probe live subdomains with httprobe
     print_step("Probing live subdomains")
     live_subs = set()
     try:
         probe = subprocess.Popen(
             ["httprobe", "-c", "50", "-t", "5000", "-p", "http:80,https:443"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
         )
         with open(all_subs_out) as f:
-            out, err = probe.communicate(input=f.read(), timeout=120)
-            if err:
-                with open(error_log, "a") as ferr:
-                    ferr.write(f"httprobe stderr: {err}\n")
+            out, _ = probe.communicate(input=f.read(), timeout=120)
             for line in out.splitlines():
                 host = line.strip().replace('http://', '').replace('https://', '').split('/')[0]
                 if host:
@@ -176,7 +159,6 @@ def step_subdomain_enum(domain, config, context):
         with open(error_log, "a") as ferr:
             ferr.write(f"httprobe failed: {e}\n")
         logger.error(f"httprobe failed: {e}")
-
     with open(live_out, "w") as f:
         for s in sorted(live_subs):
             f.write(f"{s}\n")
@@ -190,44 +172,22 @@ def step_wayback_urls(domain, config, context):
     outdir = config.get("output_dir") or "output"
     intensity = config.get("intensity", "medium")
     wayback_file = os.path.join(outdir, domain, "waybackurls.txt")
-    gau_file = os.path.join(outdir, domain, "gau.txt")
     error_log = os.path.join(outdir, domain, "errors.log")
-
-    # Try waybackurls
-    random_delay(intensity)
-    success = run_command(
-        ["waybackurls", domain, "--no-robots"],
-        timeout=300,
-        error_log=error_log,
-        capture_output=True
-    )
-    if success:
-        with open(wayback_file, "w") as f:
-            f.write(success)
-
-    # Fallback to gau if waybackurls fails or produces no output
-    if not os.path.isfile(wayback_file) or os.path.getsize(wayback_file) == 0:
-        print_step("Falling back to gau for URL fetching")
+    try:
         random_delay(intensity)
-        success = run_command(
-            ["gau", domain, "--threads", "5"],
-            timeout=300,
-            error_log=error_log,
-            capture_output=True
-        )
-        if success:
-            with open(gau_file, "w") as f:
-                f.write(success)
-            context['waybackurls'] = gau_file
-        else:
-            context['waybackurls'] = wayback_file
-    else:
-        context['waybackurls'] = wayback_file
-
+        with open(wayback_file, "w") as f:
+            subprocess.run(
+                ["waybackurls", domain],
+                stdout=f, stderr=subprocess.DEVNULL, check=True, timeout=120
+            )
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"waybackurls failed: {e}\n")
+        logger.error(f"waybackurls failed: {e}")
+    context['waybackurls'] = wayback_file
     count = 0
-    url_file = context['waybackurls']
-    if os.path.isfile(url_file):
-        with open(url_file) as f:
+    if os.path.isfile(wayback_file):
+        with open(wayback_file) as f:
             count = sum(1 for _ in f)
     print_found("Wayback URLs", count)
     timer_end(start, "Wayback URLs fetching")
@@ -241,7 +201,6 @@ def step_sensitive_file_enum(domain, config, context):
     sensitive_file = os.path.join(outdir, domain, "sensitive_files.txt")
     error_log = os.path.join(outdir, domain, "errors.log")
     live_sensitive = []
-
     sensitive_patterns = [
         r"\.env$", r"\.bak$", r"\.sql$", r"\.config$", r"\.conf$", r"\.json$", r"\.yaml$", r"\.yml$",
         r"\.log$", r"\.backup$", r"\.git/", r"\.svn/", r"\.htaccess$", r"\.htpasswd$",
@@ -259,10 +218,9 @@ def step_sensitive_file_enum(domain, config, context):
         "access", "private", "admin", "root", "user", "pass", "login", "database",
         "connection", "config", "settings"
     ]
-
-    if os.path.isfile(wayback_file) and os.path.getsize(wayback_file) > 0:
+    if os.path.isfile(wayback_file):
         try:
-            with open(wayback_file, "r") as fin:
+            with open(wayback_file) as fin:
                 urls = [line.strip() for line in fin if re.search(sensitive_regex, line, re.I)]
             with open(sensitive_file, "w") as fout:
                 found = False
@@ -283,11 +241,6 @@ def step_sensitive_file_enum(domain, config, context):
             with open(error_log, "a") as ferr:
                 ferr.write(f"Failed to extract sensitive files: {e}\n")
             logger.error(f"Failed to extract sensitive files: {e}")
-    else:
-        with open(sensitive_file, "w") as fout:
-            fout.write("No URLs available for sensitive file enumeration.\n")
-        logger.warning("No URLs available for sensitive file enumeration.")
-
     context['sensitive_files'] = live_sensitive
     print_found("Sensitive files/URLs", len(live_sensitive))
     timer_end(start, "Sensitive file enumeration")
@@ -304,8 +257,7 @@ def step_live_check(url, keywords=None):
         has_sensitive = any(kw in body for kw in (keywords or []))
         is_live = r.status_code in [200, 301, 302]
         return is_live, has_sensitive
-    except Exception as e:
-        logger.debug(f"Live check failed for {url}: {e}")
+    except Exception:
         return False, False
 
 def step_juicy_info(domain, config, context):
@@ -316,28 +268,25 @@ def step_juicy_info(domain, config, context):
     wayback_file = context.get('waybackurls', os.path.join(outdir, domain, "waybackurls.txt"))
     juicy_file = os.path.join(outdir, domain, "juicy_info.txt")
     js_dir = os.path.join(outdir, domain, "js_files")
-    getjs_file = os.path.join(outdir, domain, "getjs.txt")
     os.makedirs(js_dir, exist_ok=True)
     error_log = os.path.join(outdir, domain, "errors.log")
     live_juicy = []
-
     patterns = [
         r"api[_-]?key", r"token", r"password", r"secret", r"access[_-]?key", r"aws[_-]?key",
         r"aws[_-]?secret", r"auth[_-]?token", r"session[_-]?id", r"credential", r"stripe[_-]?key",
         r"s3\.amazonaws\.com", r"blob\.core\.windows\.net", r"firebaseio\.com", r"client[_-]?id",
         r"client[_-]?secret", r"oauth", r"db[_-]?password", r"database[_-]?url", r"[0-9a-f]{32,}",
         r"key=[a-zA-Z0-9_-]+", r"jwt=[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+",
-        r"mongodb://", r"mysql://", r"postgres://", r"slack[_-]?token", r"bearer[_-]?token"
+        r"mongodb\+srv://", r"mysql://", r"postgres://", r"slack[_-]?token", r"bearer[_-]?token"
     ]
     false_positives = [
         "csrf_token", "xsrf_token", "sessionid", "nonce", "token_validation", "form_token"
     ]
     pattern_regex = "|".join(patterns)
-
     found = False
-    if os.path.isfile(wayback_file) and os.path.getsize(wayback_file) > 0:
+    if os.path.isfile(wayback_file):
         try:
-            with open(wayback_file, "r") as fin:
+            with open(wayback_file) as fin:
                 urls = [line.strip() for line in fin if re.search(pattern_regex, line, re.I)]
             with open(juicy_file, "w") as fout:
                 for url in urls:
@@ -349,22 +298,22 @@ def step_juicy_info(domain, config, context):
                         fout.write(f"[LIVE] {url}\n")
                         live_juicy.append(url)
                     random_delay(intensity)
-
-                # Process JS files from waybackurls
-                with open(wayback_file, "r") as fin:
-                    js_urls = [line.strip() for line in fin if re.search(r'\.js$', line.lower())]
-                for url in sorted(set(js_urls)):
+                fin.seek(0)
+                js_urls = [line.strip() for line in fin if line.lower().strip().endswith(".js")]
+                for url in js_urls:
                     filename = hashlib.sha1(url.encode()).hexdigest() + ".js"
                     js_path = os.path.join(js_dir, filename)
                     try:
                         headers = {"User-Agent": get_random_user_agent()}
                         proxy = get_proxy()
-                        r = requests.get(url, headers=headers, proxies=proxy, timeout=10, verify=False)
+                        r = requests.get(
+                            url, headers=headers, proxies=proxy, timeout=10, verify=False
+                        )
                         with open(js_path, "w") as jsf:
                             jsf.write(r.text)
-                        with open(js_path, "r") as jsf:
+                        with open(js_path) as jsf:
                             for jsline in jsf:
-                                if re.search(pattern_regex, jsline, re.I) and not any(re.search(fp, jsline, re.I) for fp in false_positives):
+                                if re.search(pattern_regex, jsline, re.I) and not any(fp in jsline for fp in false_positives):
                                     fout.write(f"[JS] {url}: {jsline}")
                                     found = True
                                     live_juicy.append(url)
@@ -373,55 +322,15 @@ def step_juicy_info(domain, config, context):
                         with open(error_log, "a") as ferr:
                             ferr.write(f"Failed to fetch JS {url}: {e}\n")
                         logger.error(f"Failed to fetch JS {url}: {e}")
-
                 if found:
                     fout.write(f"\n# Juicy Info for {domain}\n")
                 else:
                     fout.write("No juicy info found.\n")
         except Exception as e:
             with open(error_log, "a") as ferr:
-                fout.write(f"Failed to extract juicy info: {e}\n")
-            logger.error(f"Failed to extract juicy info: {e}")
-    else:
-        # Fallback to getJS
-        print_step("Falling back to getJS for JavaScript extraction")
-        random_delay(intensity)
-        success = run_command(
-            ["get-js", "--js", "-u", domain, "-o", getjs_file],
-            timeout=300,,
-            error_log=error_log,
-            capture_output=True
-        )
-        if success:
-            with open(getjs_file, "r") as f:
-                js_urls = [line.strip() for line in f if re.search(r'\.js$', line.lower())]
-            with open(juicy_file, "a") as fout:
-                for url in sorted(set(js_urls)):
-                    filename = hashlib.sha1(url.encode()).hexdigest() + ".js"
-                    js_path = os.path.join(js_dir, filename)
-                    try:
-                        headers = {"User-Agent": get_random_user_agent()}
-                        proxy = get_proxy()
-                        r = requests.get(url, headers=headers, proxies=proxy,=proxy, timeout=10, verify=False)
-                        with open(js_path, "w") as jsf:
-                            jsf.write(r.text)
-                        with open(js_path, f"r") as:
-                            for jsf jsline in jsf:
-                                if re.search(pattern_regex, jsline, re.I) and not any(re.search(fp, jsline, re.I) for fp in false_positives):
-                                    fout.write(f"[JS] {url}: {jsline}")
-                                    found = True
-                                    live_juicy.append(url)
-                        random_delay(intensity)
-                    except Exception as e:
-                        with open(error_log, "a") as ferr:
-                            ferr.write(f"Failed to fetch JS {url}: {e}\n")
-                        logger.error(f"Failed to fetch JS {url}: {je}")
-                if found:
-                    fout.write(f"\n# Juicy Info for {domain}\n")
-                else:
-                    fout.write("No juicy info found.\n")
-
-    context['juicy'] = list(set(live_juicy))
+                ferr.write(f"Failed to grep juicy info: {e}\n")
+            logger.error(f"Failed to grep juicy info: {e}")
+    context['juicy'] = live_juicy
     print_found("Juicy info (URLs)", len(live_juicy))
     timer_end(start, "Juicy info extraction")
 
@@ -434,58 +343,41 @@ def step_param_discovery(domain, config, context):
     arjun_out = os.path.join(outdir, domain, "arjun.txt")
     error_log = os.path.join(outdir, domain, "errors.log")
     vulnerable_urls = []
-    
-    # Paramspider with stderr capture
-    random_delay(intensity)
-    success = run_command(
-        ["paramspider", "-d", "-d", domain, "-o", paramspider_out, "--timeout", "5", "--delay", "0.5", "--quiet"],
-        timeout=300,
-        error_log=error_log,
-        capture_output=True
-    )
-    
-    if success and os.path.isfile(paramspider_out):
+    try:
+        subprocess.run(
+            ["paramspider", "-d", domain, "-o", paramspider_out, "--timeout", "5", "--delay", "0.5"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=300
+        )
+        random_delay(intensity)
         urls = []
-        with open(paramspider_out) as f:
-            try:
-                for line in (f):
+        if os.path.isfile(paramspider_out):
+            with open(paramspider_out) as f:
+                for line in f:
                     if "http" in line and "=" in line:
                         urls.append(line.strip())
-            except Exception as e:
-                with open(error_log, "a") as ferr:
-                    ferr.write(f"Failed to read paramspider output: {e}\n")
-                logger.error(f("Failed to read params output: {e}")
-    
-        if urls:
-            with open("arjun_urls.txt", "w") as f:
-                for url in urls:
-                    f.write(f"{url}\n")
-            random_delay(intensity)
-            run_command(
-                ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out, "-t", "10", "-d", "0.5"],
-                timeout=300,
-                error_log=error_log
-            )
-            
-            if os.path.isfile(arjun_out):
-                with open(arjun_out, "r") as f:
-                    for line in f:
-                        if "GET" in line or "POST" in line:
-                            match = re.search(r"(http[^\s]+)", line)
-                            if match:
-                                vulnerable_urls.append(match.group(1))
-            try:
-                os.remove("arjun_urls.txt")
-            except:
-                pass
-        else:
-            with open(error_log, "a") as ferr:
-                ferr.write("No URLs found by paramspider.\n")
-            logger.warning("No URLs found by paramspider.")
-    
-    context['vuln_urls'] = sorted(set(vulnerable_urls))
+        with open("arjun_urls.txt", "w") as f:
+            for url in urls:
+                f.write(url + "\n")
+        subprocess.run(
+            ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out, "-t", "10", "-d", "0.5"],
+            stderr=subprocess.DEVNULL, check=True, timeout=300
+        )
+        random_delay(intensity)
+        if os.path.isfile(arjun_out):
+            with open(arjun_out) as f:
+                for line in f:
+                    if "GET" in line or "POST" in line:
+                        match = re.search(r"(http[^\s]+)", line)
+                        if match:
+                            vulnerable_urls.append(match.group(1))
+        os.remove("arjun_urls.txt")
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"Parameter discovery failed: {e}\n")
+        logger.error(f"Parameter discovery failed: {e}")
+    context['vuln_urls'] = vulnerable_urls
     print_found("Parameter discovery", len(vulnerable_urls))
-    timer_end(start, "Parameter discovery completed")
+    timer_end(start, "Parameter discovery")
 
 def step_advanced_xss(domain, config, context):
     print_step("Scanning for XSS vulnerabilities")
@@ -496,105 +388,88 @@ def step_advanced_xss(domain, config, context):
     dalfox_out = os.path.join(outdir, domain, "dalfox.txt")
     xsstrike_out = os.path.join(outdir, domain, "xsstrike.txt")
     paramspider_out = os.path.join(outdir, domain, "paramspider.txt")
-    
-    # Dalfox
-    if os.path.isfile(paramspider_out) and os.path.getsize(paramspider_out) > 0:
+    try:
+        subprocess.run([
+            "dalfox", "file", paramspider_out,
+            "--custom-payload", "/usr/share/xss-payloads.txt",
+            "--output", dalfox_out,
+            "--user-agent", get_random_user_agent(),
+            "--delay", "500",
+            "--timeout", "5"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
         random_delay(intensity)
-        run_command(
-            [
-                "dalfox", "file", paramspider_out,
-                "--custom-payload", "/usr/share/dalfox/payloads.txt",
-                "--output", dalfox_out,
-                "--user-agent", get_random_user_agent(),
-                "--delay", "500",
-                "--timeout", "5"
-            ],
-            timeout=300,
-            error_log=error_log
-        )
-    else:
-        with open("dalfox_out", "w") as f:
-            f.write("No URLs available for Dalfox XSS scan.\n")
-        logger.warning("No URLs available for Dalfox XSS scan.")
-    
-    # XSStrike
-    random_delay(intensity)
-    proxy = get_proxy()
-    cmd = [
-        "xsstrike", "-u", f"-u", https://{domain}",
-        "--file-log", xsstrike_out,
-        "--headers", f"User-Agent: {get_random_user_agent()}",
-        "--delay", "0.5",
-        "--timeout", "5"
-    ]
-    if proxy:
-        cmd.extend(["--proxy", proxy.get("http")])])
-    run_command(cmd, timeout=300, error_log=error_log)
-    
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"dalfox failed: {e}\n")
+        logger.error(f"dalfox failed: {e}")
+    try:
+        proxy = get_proxy()
+        cmd = [
+            "xsstrike", "-u", f"https://{domain}",
+            "--file-log", xsstrike_out,
+            "--headers", f"User-Agent: {get_random_user_agent()}",
+            "--delay", "0.5",
+            "--timeout", "5"
+        ]
+        if proxy:
+            cmd.extend(["--proxy", proxy.get("http")])
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+        random_delay(intensity)
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"xsstrike failed: {e}\n")
+        logger.error(f"xsstrike failed: {e}")
     context['xss'] = [dalfox_out, xsstrike_out]
-    print_found("XSS scan files", 2 if os.path.exists(dalfox_out) and os.path.exists(xsstrike_out) else 1 if os.path.exists(xsstrike_out) else 0)
-    timer_end(start, "XSS scanning completed")
+    print_found("XSS scan files", 2)
+    timer_end(start, "XSS scanning")
 
-def step_dir_fuzz(domain, config, config, context):
+def step_dir_fuzz(domain, config, context):
     print_step("Directory and file fuzzing")
     start = timer_start()
     outdir = config.get("output_dir") or "output"
     intensity = config.get("intensity", "medium")
-    timeout = 300
     error_log = os.path.join(outdir, domain, "errors.log")
     result_file = os.path.join(outdir, domain, "dir_fuzz.txt")
     fuzz_results = []
     scan_config = context.get("scan_config", {})
-    
     if intensity == "light":
         wordlist = "/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt"
         threads = 5
-        timeout = 300
     elif intensity == "medium":
         wordlist = "/usr/share/seclists/Discovery/Web-Content/common.txt"
         threads = 10
-        timeout = 600
     else:
-        wordlist = "/usr/share/seclists/Discovery/Web-Content/raft-large-files.txt"
-        threads = 100
-        timeout = 900
-    
-    tool = scan_config.get("dir_fuzz_tool", "ffuf")"
-    
+        wordlist = "/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt"
+        threads = 30
+    tool = scan_config.get("dir_fuzz_tool", "ffuf")
     if tool == "dirsearch":
-        random_delay(intensity)
-        run_command(
-            [
-                "dirsearch", "-u", "-r", f"https://{domain}",
-                "-w", "-w", wordlist,
+        try:
+            subprocess.run([
+                "dirsearch", "-u", f"https://{domain}",
+                "-w", wordlist,
                 "-t", str(threads),
                 "-o", result_file,
                 "--format", "plain",
                 "--random-agent",
                 "--timeout", "5",
                 "--delay", "0.5"
-            ],
-            timeout=timeout,
-            error_log=error_log
-        )
-        if os.path.isfile(result_file):
-            with open(result_file, "r") as f:
-                try:
-                    for line in line f:
-                        m = re.search(r"\[.*\]\ (http[^\s]+)", line)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=600)
+            if os.path.isfile(result_file):
+                with open(result_file) as f:
+                    for line in f:
+                        m = re.match(r"\[.*\] (http[^\s]+)", line)
                         if m:
-                            fuzz_results.append(m.group(m.group(1)))
-                except Exception as e:
-                    with open(error_log, "a") as ferr:
-                        ferr.write(f"Failed to parse dirsearch output: {e}\n")
-                    logger.error(f"Failed to parse dirsearch output: {error_log}")
+                            fuzz_results.append(m.group(1))
+            random_delay(intensity)
+        except Exception as e:
+            with open(error_log, "a") as ferr:
+                ferr.write(f"dirsearch failed: {e}\n")
+            logger.error(f"dirsearch failed: {e}")
     else:
-        random_delay(intensity)
-        run_command(
-            [
-                "ffuf", "-u", r", f"https://{domain}/FUZZ",
-                "-w", "-",
-                wordlist,
+        try:
+            subprocess.run([
+                "ffuf", "-u", f"https://{domain}/FUZZ",
+                "-w", wordlist,
                 "-t", str(threads),
                 "-of", "csv",
                 "-o", result_file,
@@ -602,96 +477,81 @@ def step_dir_fuzz(domain, config, config, context):
                 "-timeout", "5",
                 "-rate", "50",
                 "-mc", "200,301,302"
-            ],
-            timeout=timeout,
-            error_log=error_log
-        )
-        
-        if os.path.isfile(result_file):
-            with open(result_file, "r") as f:
-                try:
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=600)
+            if os.path.isfile(result_file):
+                with open(result_file) as f:
                     for line in f:
-                        if line.strip() and not line.startswith("url"):
-                            parts = line.strip().split(",")
-                            if len(parts) > 0 and parts[0].startswith("http"):
-                            f.write(parts[0])
-                            f.write(parts[0])
+                        if line.startswith("url"):
+                            continue
+                        parts = line.strip().split(",")
+                        if len(parts) > 0 and parts[0].startswith("http"):
                             fuzz_results.append(parts[0])
-                except Exception as e:
-                    with open(error_log, "a") as ferr:
-                        ferr.write(f"Failed to parse ffuf output: {e}\n")
-                    logger.error(f"Failed to parse ffuf output: {e}")
-    
+            random_delay(intensity)
+        except Exception as e:
+            with open(error_log, "a") as ferr:
+                ferr.write(f"ffuf failed: {e}\n")
+            logger.error(f"ffuf failed: {e}")
     fuzz_results = sorted(set(fuzz_results))
     with open(result_file, "a") as f:
         f.write("\n# Deduped Fuzz Results\n")
         for path in fuzz_results:
             f.write(path + "\n")
-    
     context['dir_fuzz'] = fuzz_results
     print_found("Directory fuzz", len(fuzz_results))
-    timer_end(start, "Directory fuzzing completed")
+    timer_end(start, "Directory fuzzing")
 
 def step_sqlmap(domain, config, context):
     print_step("Running SQL injection tests")
     start = timer_start()
     outdir = config.get("output_dir") or "output"
     intensity = config.get("intensity", "medium")
-    timeout = 300 if intensity == "light" else 500 if intensity == "medium" else 800
     vuln_urls = context.get('vuln_urls', [])
     error_log = os.path.join(outdir, domain, "errors.log")
     sqlmap_logs = []
-    
     for i, url in enumerate(vuln_urls):
-        sqlmap_dir = os.path.join(outdir, domain, f"sqlmap_{i+1}"))
+        sqlmap_dir = os.path.join(outdir, domain, f"sqlmap_{i+1}")
         os.makedirs(sqlmap_dir, exist_ok=True)
-        
-        random_delay(intensity)
-        run_command(
-            [
-                "sqlmap", "-u", url, "--batch", "-",
+        try:
+            subprocess.run([
+                "sqlmap", "-u", url, "--batch",
                 "--output-dir", sqlmap_dir,
                 "--random-agent",
                 "--delay", "0.5",
                 "--timeout", "5",
                 "--tamper", "space2comment,randomcase"
-            ],
-            timeout=timeout,
-            error_log=error_log
-        )
-        if os.path.isdir(sqlmap_dir) and os.listdir(sqlmap_dir)):
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
             sqlmap_logs.append(sqlmap_dir)
-        random_delay(intensity)
-        
+            random_delay(intensity)
+        except Exception as e:
+            with open(error_log, "a") as ferr:
+                ferr.write(f"sqlmap on {url} failed: {e}\n")
+            logger.error(f"sqlmap on {url} failed: {e}")
     context['sqlmap'] = sqlmap_logs
     print_found("SQLMap scans", len(sqlmap_logs))
-    timer_end(start, "SQL injection testing completed")
+    timer_end(start, "SQL injection testing")
 
 def step_nuclei_chain(domain, config, context):
-    print_step("Scanning for vulnerabilities with Nuclei")
+    print_step("Running nuclei chain scan")
     start = timer_start()
-    outdir = config.get("output_dir") or "output")
+    outdir = config.get("output_dir") or "output"
     intensity = config.get("intensity", "medium")
-    timeout = 300 if intensity == "light" else 600
     error_log = os.path.join(outdir, domain, "errors.log")
-    
     nuclei_targets = set()
     nuclei_targets.update(context.get('live_subdomains', []))
     nuclei_targets.update(context.get('dir_fuzz', []))
-    nuclei_targets.update(context.get('juicy', [])))
-    nuclei_targets.update(context.get('sensitive_files', [])))
-    nuclei_targets.update(context.get('vuln_urls', [])))
+    nuclei_targets.update(context.get('juicy', []))
+    nuclei_targets.update(context.get('sensitive_files', []))
+    nuclei_targets.update(context.get('vuln_urls', []))
     if os.path.isfile(context.get('waybackurls', '')):
         with open(context['waybackurls']) as f:
-            nuclei_targets.update([line.strip() for line in f if line.strip()])
-
+            nuclei_targets.update(line.strip() for line in f if line.strip())
     agg_urls = []
     for u in nuclei_targets:
         if isinstance(u, str):
-            if u.startswith("http'):
+            if u.startswith("http://") or u.startswith("https://"):
                 agg_urls.append(u)
             else:
-                agg_urls.append(f"https://{u}")
+                agg_urls.append(f"http://{u}")
                 agg_urls.append(f"https://{u}")
         elif isinstance(u, list):
             for val in u:
@@ -700,68 +560,56 @@ def step_nuclei_chain(domain, config, context):
                 else:
                     agg_urls.append(f"http://{val}")
                     agg_urls.append(f"https://{val}")
-
-    agg_urls = sorted(set(agg_urls)))
+    agg_urls = sorted(set(agg_urls))
     nuclei_targets_file = os.path.join(outdir, domain, "nuclei_targets.txt")
     with open(nuclei_targets_file, "w") as f:
         for url in agg_urls:
-            f.write(f"{url}\n")
-
+            f.write(url + "\n")
     nuclei_out = os.path.join(outdir, domain, "nuclei_chained.txt")
-    
-    if os.path.isfile(nuclei_targets_file) and os.path.getsize(nuclei_targets_file) > 0:
+    try:
+        subprocess.run([
+            "nuclei",
+            "-l", nuclei_targets_file,
+            "-o", nuclei_out,
+            "-silent",
+            "-c", str(context.get("scan_config", {}).get("threads", 10)),
+            "-H", f"User-Agent: {get_random_user_agent()}",
+            "-t", "5",
+            "-rl", "50"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=600)
         random_delay(intensity)
-        run_command(
-            [
-                "nuclei",
-                "-l", nuclei_targets_file,
-                "-o", nuclei_out,
-                "-silent",
-                "-c", str(config.get("threads", 5)),
-                "-H", f"User-Agent: {get_random_user_agent()}",
-                "-t", "5",
-                "-rl", "30"
-            ],
-            timeout=timeout,
-            error_log=error_log
-        )
-    else:
-        with open(nuclei_out, "w") as f:
-            f.write("No targets available for Nuclei scan.\n")
-        logger.warning("No targets available for Nuclei scan.")
-    
-    count = 0
-    if os.path.isfile(nuclei_out)):
-        with open(os.pathnuclei_out, "r") as f:
-            count = sum(1 for _ in f)
+    except Exception as e:
+        with open(error_log, "a") as ferr:
+            ferr.write(f"Nuclei chained scan failed: {e}\n")
+        logger.error(f"Nuclei chained scan failed: {e}")
     context['nuclei_chained'] = nuclei_out
+    count = 0
+    if os.path.isfile(nuclei_out):
+        with open(nuclei_out) as f:
+            count = sum(1 for _ in f)
     print_found("Nuclei findings", count)
-    timer_end(start, count"Nuclei scan completed")
+    timer_end(start, "Nuclei chain scan")
 
 def step_report(domain, config, context):
     print_step("Generating HTML report")
     start = timer_start()
-    try:
-        generate_report(domain, config, context)
-    except Exception as e:
-        error_log = os.path.join(config.get("output_dir", "output"), domain, "errors.log")
-        with open(error_log, "a") as ferr:
-            ferr.write(f"Report generation failed: {e}\n")
-        logger.error(f("Report generation failed: {e}")
-    timer_end(start, "Report generation completed")
+    generate_report(domain, config, context)
+    timer_end(start, "Report generation")
+
+# ---- Intensity-Driven Pipeline ----
 
 _INTENSITY_STEPS = [
     (step_check_dependencies, "light"),
     (step_subdomain_enum, "light"),
     (step_wayback_urls, "light"),
     (step_sensitive_file_enum, "light"),
+    (step_report, "light"),
     (step_juicy_info, "medium"),
-    (step_param_discovery", "medium"),
+    (step_param_discovery, "medium"),
     (step_dir_fuzz, "medium"),
     (step_sqlmap, "medium"),
     (step_nuclei_chain, "medium"),
     (step_advanced_xss, "heavy"),
-    (step_report, "light")
 ]
 
 _INTENSITY_ORDER = {"light": 0, "medium": 1, "heavy": 2}
@@ -770,7 +618,7 @@ def get_steps_for_intensity(intensity):
     allowed = _INTENSITY_ORDER.get(intensity, 1)
     steps = []
     for step, level in _INTENSITY_STEPS:
-        if _INTENSITY_ORDER.get(level, 3) <= allowed:
+        if _INTENSITY_ORDER[level] <= allowed:
             steps.append(step)
     return steps
 
@@ -778,11 +626,7 @@ def run_scan(domain, config, context):
     intensity = config.get("intensity", "medium")
     steps = get_steps_for_intensity(intensity)
     for step in steps:
-        try:
-            step(domain, config, context)
-        except Exception as e:
-            logger.error(f"Step {step.__name__} failed: {e}")
-            continue
-    print("\nAll scan steps completed successfully!")
+        step(domain, config, context)
 
-
+# For backward compatibility, export get_steps_for_intensity
+scanner_steps = get_steps_for_intensity
