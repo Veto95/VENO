@@ -54,35 +54,6 @@ except ImportError:
     get_ascii_meme = lambda: "¯\\_(ツ)_/¯"
     get_insult = lambda: "No memes for you!"
 
-CAT_FRAMES = [
-    r''' /\_/\  
- ( o.o )''',
-    r''' /\_/\  
- ( -.- )''',
-    r''' /\_/\  
- ( o.o )''',
-    r''' /\_/\  
- ( -.- )~''',
-    r''' /\_/\  
- ( o.o )~''',
-    r''' /\_/\  
- ( -.- )''',
-]
-
-def ascii_loader(message, duration=0.4):
-    from time import sleep
-    t_end = time.time() + duration
-    i = 0
-    while time.time() < t_end:
-        frame = CAT_FRAMES[i % len(CAT_FRAMES)]
-        sys.stdout.write(f"\r{message}\n{frame}\033[K")
-        sys.stdout.flush()
-        sleep(0.04)
-        i += 1
-        sys.stdout.write("\033[F" * 2)
-    sys.stdout.write(f"\r{message}\n{CAT_FRAMES[0]}\n")
-    sys.stdout.flush()
-
 def color(text, c, bold=False, bg=None):
     if not RICH_AVAILABLE:
         codes = {
@@ -113,7 +84,7 @@ def print_banner():
 
 def print_usage():
     msg = color("[VENO]", "cyan", bold=True) + color(" Usage: set options, show options, run, help, clear, exit", "white")
-    tail = color("Type 'help' for full command details.\n", "magenta", bold=True)
+    tail = color("Type 'help' for full command details.\n", "green", bold=True)
     if console:
         console.print(msg)
         console.print(tail)
@@ -124,32 +95,39 @@ def print_usage():
 def print_help():
     lines = [
         "\n" + color("VENO Automated Recon Shell - Full Help", "magenta", bold=True) + "\n",
-        "  " + color("show options", "cyan", bold=True),
+        "  " + color("show options", "cyan", "green")
         "      Prints all current settings and scan parameters.",
-        "  " + color("set <option> <value>", "cyan", bold=True),
+        "  " + color("set <option> <value>", "cyan", "blue")
         "      Set a scan option. Options include:",
-        "        " + color("domain", "yellow", bold=True) + "       - Target domain to scan (e.g. set domain example.com)",
-        "        " + color("output", "yellow", bold=True) + "       - Output directory for results (default: output)",
-        "        " + color("threads", "yellow", bold=True) + "      - Number of threads/tools to use (e.g. set threads 10)",
-        "        " + color("wordlist", "yellow", bold=True) + "     - Custom wordlist path for fuzzing/discovery",
-        "        " + color("subscan", "yellow", bold=True) + "      - true/false to enable/disable subdomain scan",
-        "        " + color("intensity", "yellow", bold=True) + "    - Scan profile (see below)",
+        "        " + color("domain", "yellow", bold=True) + "       - Target domain to scan (e.g., set domain example.com),
+        "        " + color("yellow", bold=True),
+        + "       - Output directory for results (default: output_dir),
+        "        " + color("threads", "yellow", bold=True),
+        + "      - Number of threads/tools to use (e.g., set threads 10),
+        "        " + color("wordlist", "yellow", bold=True),
+        + "     - Custom wordlist path for fuzzing/discovery,
+        "        " + color("subscan", "yellow", bold=True),
+        + "      - true/false to enable/disable subdomain scan,
+        - "        " + color("intensity", "yellow", bold=True),
+        + "    - Scan profile (see below)",
+        "      " + 
         "      Example: set domain example.com",
         "      Example: set intensity medium",
         "      Example: set threads 50\n",
-        "  " + color("run", "cyan", bold=True),
+        "  \n" + color("run", "cyan", "green),
         "      Launches the full scan with the current config.",
         "  " + color("save config <filename>", "cyan", bold=True),
         "      Saves current config to a file.",
         "  " + color("timer", "cyan", bold=True),
         "      Show session elapsed time.",
-        "  " + color("clear", "cyan", bold=True),
+        "  " + color("clear", "cyan", "blue),
         "      Clears the screen .",
         "  " + color("help", "cyan", bold=True),
         "      Show this help message at any time.",
-        "  " + color("exit, quit", "cyan", bold=True),
+        "  " + color("exit", "cyan", bold=True),
+        "      or " + color("quit", "cyan", bold=True),
         "      Leave the shell.\n",
-        color("Scan Intensities (affect wordlist, tools, threads):", "magenta", bold=True) + "\n"
+        color("Scan Intensities (affect wordlist, tools, and tools used):", "magenta", bold=True) + "\n"
     ]
     for key, profile in SCAN_INTENSITIES.items():
         features = []
@@ -400,7 +378,10 @@ def main():
                     print(err)
                 continue
             ensure_output_dirs(config)
-            ascii_loader(color("[VENO] Starting scan...", "yellow", bold=True), duration=0.4)
+            if console:
+                console.print(color("[VENO] Starting scan...", "yellow", bold=True))
+            else:
+                print(color("[VENO] Starting scan...", "yellow", bold=True))
             try:
                 run_scanner(config["domain"], config)
                 msg = color("[VENO] Scan completed successfully.", "green", bold=True)
