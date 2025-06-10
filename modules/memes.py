@@ -91,9 +91,8 @@ def get_ascii_meme():
 """,
     ]
     return random.choice(memes)
-import random
 
-def get_insults():
+def get_insult():
     lines = [
         "🐧 Linux is not a hobby. It's a personality.",
         "📡 If nmap was a religion, you'd be a high priest.",
