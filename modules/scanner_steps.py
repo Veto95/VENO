@@ -212,7 +212,7 @@ def step_wayback_urls(domain, config, context):
     random_delay(intensity)
     stdout = run_command(
         ["waybackurls", domain],
-        timeout=600,
+        timeout=1000,
         error_log=error_log,
         capture_output=True
     )
@@ -225,7 +225,7 @@ def step_wayback_urls(domain, config, context):
         random_delay(intensity)
         stdout = run_command(
             ["gau", domain, "--threads", "5"],
-            timeout=300,
+            timeout=1000,
             error_log=error_log,
             capture_output=True
         )
