@@ -144,7 +144,6 @@ def print_help():
         print(help_text)
 
 def show_options(config):
-    """Display only core configuration options."""
     core_keys = ['domain', 'output_dir', 'threads', 'wordlist', 'subscan', 'intensity']
     msg = color("\nCurrent VENO options:", "green", bold=True)
     if console:
@@ -248,7 +247,6 @@ def main():
         "output_dir": "output",
         "subscan": True,
         "intensity": default_intensity,
-        #"dir_fuzz_tool": "dirsearch"  # Default to dirsearch
     }
 
     if default_intensity in SCAN_INTENSITIES:
@@ -274,149 +272,163 @@ def main():
             continue
         COMMAND_LOG.append(cmd)
 
-        if cmd in ("exit", "quit"):
-            bye_msg = color("Bye.", "magenta", bold=True)
-            if console:
-                console.print(bye_msg)
-            else:
-                print(bye_msg)
-            break
+        try:  # Top-level try-except to catch all command-related exceptions
+            if cmd in ("exit", "quit"):
+                bye_msg = color("Bye.", "magenta", bold=True)
+                if console:
+                    console.print(bye_msg)
+                else:
+                    print(bye_msg)
+                break
 
-        elif cmd == "help":
-            print_help()
-        elif cmd in ("show options", "options"):
-            show_options(config)
-        elif cmd == "clear":
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print_banner()
-            print_usage()
-            continue
-        elif cmd.startswith("save config "):
-            _, _, filename = cmd.partition("save config ")
-            filename = filename.strip()
-            if filename:
-                save_config(config, filename)
-            else:
-                err = color("[VENO] Usage: save config <filename>", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
-                else:
-                    print(err)
-        elif cmd == "timer":
-            elapsed = time.time() - session_start
-            mins, secs = divmod(int(elapsed), 60)
-            msg = color(f"[VENO] Session time: {mins} min {secs} sec", "yellow", bold=True)
-            if console:
-                console.print(msg)
-            else:
-                print(msg)
-        elif cmd.startswith("set "):
-            parts = cmd.split(maxsplit=2)
-            if len(parts) < 3:
-                err = color("Usage: set <option> <value>", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
-                else:
-                    print(err)
+            elif cmd == "help":
+                print_help()
+            elif cmd in ("show options", "options"):
+                show_options(config)
+            elif cmd == "clear":
+                os.system('cls' if os.name == 'nt' else 'clear')
+                print_banner()
+                print_usage()
                 continue
-            option = parts[1]
-            value = parts[2]
-            if option == "threads":
-                if not validate_threads(value):
-                    err = color("[VENO] threads must be an integer between 1 and 1000", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
-                    continue
-                config["threads"] = int(value)
-            elif option == "output_dir":
-                config["output_dir"] = safe_path(value)
-            elif option == "wordlist":
-                if not os.path.isfile(value):
-                    err = color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
-                    continue
-                config["wordlist"] = value
-            elif option == "domain":
-                if not validate_domain(value):
-                    err = color("[VENO] Invalid domain name.", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
-                    continue
-                config["domain"] = value
-            elif option == "subscan":
-                config["subscan"] = value.lower() == "true"
-            elif option == "intensity":
-                merge_intensity(config, value)
-            else:
-                err = color(f"[VENO] Unknown option: {option}", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
+            elif cmd.startswith("save config "):
+                _, _, filename = cmd.partition("save config ")
+                filename = filename.strip()
+                if filename:
+                    save_config(config, filename)
                 else:
-                    print(err)
-        elif cmd == "run":
-            if not config.get("domain"):
-                err = color("[VENO] Please set a valid domain before running.", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
-                else:
-                    print(err)
-                continue
-            ensure_output_dirs(config)
-            error_log = os.path.join(config["output_dir"], config["domain"], "errors.log")
-            if console:
-                console.print(color("[VENO] Starting scan...", "yellow", bold=True))
-            else:
-                print(color("[VENO] Starting scan...", "yellow", bold=True))
-            try:
-                if HAS_MEMES:
-                    meme = get_ascii_meme()
+                    err = color("[VENO] Usage: save config <filename>", "red", bold=True, bg="black")
                     if console:
-                        console.print(meme)
+                        console.print(err)
                     else:
-                        print(meme)
-                run_scanner(config["domain"], config)
-                msg = color("[VENO] Scan completed successfully.", "green", bold=True)
+                        print(err)
+            elif cmd == "timer":
+                elapsed = time.time() - session_start
+                mins, secs = divmod(int(elapsed), 60)
+                msg = color(f"[VENO] Session time: {mins} min {secs} sec", "yellow", bold=True)
                 if console:
                     console.print(msg)
-                    if HAS_MEMES:
-                        console.print(get_ascii_meme())
                 else:
                     print(msg)
-                    if HAS_MEMES:
-                        print(get_ascii_meme())
-            except Exception as e:
-                err = f"Scan failed: {e}"
-                with open(error_log, "a", encoding='utf-8') as ferr:
-                    ferr.write(err + "\n")
-                if console:
-                    console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
+            elif cmd.startswith("set "):
+                parts = cmd.split(maxsplit=2)
+                if len(parts) < 3:
+                    err = color("Usage: set <option> <value>", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
+                    continue
+                option = parts[1]
+                value = parts[2]
+                if option == "threads":
+                    if not validate_threads(value):
+                        err = color("[VENO] threads must be an integer between 1 and 1000", "red", bold=True, bg="black")
+                        if console:
+                            console.print(err)
+                        else:
+                            print(err)
+                        continue
+                    config["threads"] = int(value)
+                elif option == "output_dir":
+                    config["output_dir"] = safe_path(value)
+                elif option == "wordlist":
+                    if not os.path.isfile(value):
+                        err = color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg="black")
+                        if console:
+                            console.print(err)
+                        else:
+                            print(err)
+                        continue
+                    config["wordlist"] = value
+                elif option == "domain":
+                    if not validate_domain(value):
+                        err = color("[VENO] Invalid domain name.", "red", bold=True, bg="black")
+                        if console:
+                            console.print(err)
+                        else:
+                            print(err)
+                        continue
+                    config["domain"] = value
+                elif option == "subscan":
+                    config["subscan"] = value.lower() == "true"
+                elif option == "intensity":
+                    merge_intensity(config, value)
                 else:
-                    print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
-        elif cmd == "meme" and HAS_MEMES:
-            meme = get_ascii_meme()
-            if console:
-                console.print(meme)
+                    err = color(f"[VENO] Unknown option: {option}", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
+            elif cmd == "run":
+                if not config.get("domain"):
+                    err = color("[VENO] Please set a valid domain before running.", "red", bold=True, bg="black")
+                    if console:
+                        console.print(err)
+                    else:
+                        print(err)
+                    continue
+                ensure_output_dirs(config)
+                error_log = os.path.join(config["output_dir"], config["domain"], "errors.log")
+                if console:
+                    console.print(color("[VENO] Starting scan...", "yellow", bold=True))
+                else:
+                    print(color("[VENO] Starting scan...", "yellow", bold=True))
+                try:
+                    if HAS_MEMES:
+                        meme = get_ascii_meme()
+                        if console:
+                            console.print(meme)
+                        else:
+                            print(meme)
+                    run_scanner(config["domain"], config)
+                    msg = color("[VENO] Scan completed successfully.", "green", bold=True)
+                    if console:
+                        console.print(msg)
+                        if HAS_MEMES:
+                            console.print(get_ascii_meme())
+                    else:
+                        print(msg)
+                        if HAS_MEMES:
+                            print(get_ascii_meme())
+                except Exception as e:
+                    err = f"Scan failed: {e}"
+                    try:
+                        with open(error_log, "a", encoding='utf-8') as ferr:
+                            ferr.write(err + "\n")
+                    except Exception as log_err:
+                        if console:
+                            console.print(color(f"[VENO] Failed to write error log: {log_err}", "red", bold=True))
+                        else:
+                            print(color(f"[VENO] Failed to write error log: {log_err}", "red", bold=True))
+                    if console:
+                        console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
+                    else:
+                        print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
+            elif cmd == "meme" and HAS_MEMES:
+                meme = get_ascii_meme()
+                if console:
+                    console.print(meme)
+                else:
+                    print(meme)
+            elif cmd == "insult" and HAS_MEMES:
+                insult = get_insult()
+                if console:
+                    console.print(insult)
+                else:
+                    print(insult)
             else:
-                print(meme)
-        elif cmd == "insult" and HAS_MEMES:
-            insult = get_insult()
+                err = color(f"[VENO] Unknown command: {cmd}", "red", bold=True, bg="black")
+                if console:
+                    console.print(err)
+                else:
+                    print(err)
+        except Exception as e:
+            err = f"Command '{cmd}' failed: {e}"
+            # Fallback to console print if error_log isn't defined yet
             if console:
-                console.print(insult)
+                console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
             else:
-                print(insult)
-        else:
-            err = color(f"[VENO] Unknown command: {cmd}", "red", bold=True, bg="black")
-            if console:
-                console.print(err)
-            else:
-                print(err)
+                print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
 
 if __name__ == "__main__":
     main()
