@@ -6,6 +6,7 @@ import hashlib
 import logging
 import random
 import requests
+import urllib3
 from modules.reporter import generate_report
 from modules.dependencies import check_dependencies, dependencies
 from urllib.parse import urlparse
@@ -112,7 +113,6 @@ def step_subdomain_enum(domain, config, context):
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
     subfinder_out = os.path.join(domain_dir, "subfinder.txt")
-    harvester_out = os.path.join(domain_dir, "theharvester.xml")
     all_subs_out = os.path.join(domain_dir, "all_subdomains.txt")
     live_out = os.path.join(domain_dir, "live_subdomains.txt")
     error_log = os.path.join(domain_dir, "errors.log")
@@ -125,29 +125,32 @@ def step_subdomain_enum(domain, config, context):
         error_log=error_log
     )
 
-    # theHarvester with limited sources
+    # theHarvester with separate sources
     random_delay(intensity)
     proxy = get_proxy()
-    cmd = ["theHarvester", "-d", domain, "-b", "bing,dnsdumpster", "-f", harvester_out]
-    if proxy:
-        cmd.extend(["--proxy", proxy.get("http")])
-    run_command(cmd, timeout=300, error_log=error_log)
+    subs = set()
+    sources = ["bing", "dnsdumpster"]
+    for source in sources:
+        harvester_out = os.path.join(domain_dir, f"theharvester_{source}.xml")
+        cmd = ["theHarvester", "-d", domain, "-b", source, "-f", harvester_out]
+        if proxy:
+            cmd.extend(["--proxy", proxy.get("http")])
+        run_command(cmd, timeout=300, error_log=error_log)
+        if os.path.isfile(harvester_out):
+            try:
+                with open(harvester_out) as f:
+                    content = f.read()
+                    for token in re.findall(rf"[\w\-\.]+{re.escape(domain)}", content):
+                        subs.add(token.strip('",[]()<>'))
+            except Exception as e:
+                with open(error_log, "a") as ferr:
+                    ferr.write(f"Parse theHarvester {source} failed: {e}\n")
+                logger.error(f"Parse theHarvester {source} failed: {e}")
 
     # Combine subdomains
-    subs = set()
     if os.path.isfile(subfinder_out):
         with open(subfinder_out) as f:
             subs.update(line.strip() for line in f if line.strip())
-    if os.path.isfile(harvester_out):
-        try:
-            with open(harvester_out) as f:
-                content = f.read()
-                for token in re.findall(rf"[\w\-\.]+{re.escape(domain)}", content):
-                    subs.add(token.strip('",[]()<>'))
-        except Exception as e:
-            with open(error_log, "a") as ferr:
-                ferr.write(f"Parse theHarvester failed: {e}\n")
-            logger.error(f"Parse theHarvester failed: {e}")
 
     with open(all_subs_out, "w") as f:
         for s in sorted(subs):
@@ -196,8 +199,8 @@ def step_wayback_urls(domain, config, context):
     # Try waybackurls
     random_delay(intensity)
     success = run_command(
-        ["waybackurls", domain, "--no-robots"],
-        timeout=300,
+        ["waybackurls", domain],
+        timeout=600,
         error_log=error_log,
         capture_output=True
     )
@@ -241,6 +244,8 @@ def step_sensitive_file_enum(domain, config, context):
     sensitive_file = os.path.join(outdir, domain, "sensitive_files.txt")
     error_log = os.path.join(outdir, domain, "errors.log")
     live_sensitive = []
+
+    urllib3.disable_warnings()  # Suppress InsecureRequestWarning
 
     sensitive_patterns = [
         r"\.env$", r"\.bak$", r"\.sql$", r"\.config$", r"\.conf$", r"\.json$", r"\.yaml$", r"\.yml$",
@@ -380,7 +385,7 @@ def step_juicy_info(domain, config, context):
                     fout.write("No juicy info found.\n")
         except Exception as e:
             with open(error_log, "a") as ferr:
-                fout.write(f"Failed to extract juicy info: {e}\n")
+                ferr.write(f"Failed to extract juicy info: {e}\n")
             logger.error(f"Failed to extract juicy info: {e}")
     else:
         # Fallback to getJS
@@ -430,27 +435,32 @@ def step_param_discovery(domain, config, context):
     start = timer_start()
     outdir = config.get("output_dir") or "output"
     intensity = config.get("intensity", "medium")
-    paramspider_out = os.path.join(outdir, domain, "paramspider.txt")
-    arjun_out = os.path.join(outdir, domain, "arjun.txt")
-    error_log = os.path.join(outdir, domain, "errors.log")
+    domain_dir = os.path.join(outdir, domain)
+    paramspider_out = os.path.join(domain_dir, "paramspider.txt")
+    arjun_out = os.path.join(domain_dir, "arjun.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
     vulnerable_urls = []
 
-    # Paramspider with stderr capture
+    # Paramspider with corrected output handling
     random_delay(intensity)
     success = run_command(
-        ["paramspider", "-d", domain, "-o", paramspider_out, "--timeout", "5", "--delay", "0.5", "--quiet"],
+        ["paramspider", "-d", domain, "--output", domain_dir, "--silent"],
         timeout=300,
         error_log=error_log,
         capture_output=True
     )
-
-    if success and os.path.isfile(paramspider_out):
+    paramspider_temp = os.path.join(domain_dir, f"{domain}.txt")
+    if success and os.path.isfile(paramspider_temp):
         urls = []
-        with open(paramspider_out) as f:
+        with open(paramspider_temp, "r") as f:
             try:
                 for line in f:
                     if "http" in line and "=" in line:
                         urls.append(line.strip())
+                # Save to paramspider_out
+                with open(paramspider_out, "w") as fout:
+                    for url in urls:
+                        fout.write(f"{url}\n")
             except Exception as e:
                 with open(error_log, "a") as ferr:
                     ferr.write(f"Failed to read paramspider output: {e}\n")
@@ -482,6 +492,9 @@ def step_param_discovery(domain, config, context):
             with open(error_log, "a") as ferr:
                 ferr.write("No URLs found by paramspider.\n")
             logger.warning("No URLs found by paramspider.")
+    else:
+        with open(paramspider_out, "w") as f:
+            f.write("No parameters found by ParamSpider.\n")
 
     context['vuln_urls'] = sorted(set(vulnerable_urls))
     print_found("Parameter discovery", len(vulnerable_urls))
