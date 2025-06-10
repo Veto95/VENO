@@ -136,7 +136,7 @@ def step_subdomain_enum(domain, config, context):
         with open(subfinder_out, "r", encoding='utf-8') as f:
             subs.update(line.strip() for line in f if line.strip())
 
-    sources = ["bing", "dnsdumpster"]
+    sources = ["bing", "google"]
     for source in sources:
         random_delay(intensity)
         proxy = get_proxy()
@@ -431,7 +431,7 @@ def step_param_discovery(domain, config, context):
 
     random_delay(intensity)
     stdout = run_command(
-        ["paramspider", "-d", domain, "--output", paramspider_out, "--silent"],
+        ["paramspider", "-d", domain, ">", paramspider_out],
         timeout=300,
         error_log=error_log,
         capture_output=True
@@ -744,7 +744,6 @@ def step_nuclei_chain(domain, config, context):
                 "-silent",
                 "-c", str(config.get("threads", 10)),
                 "-H", f"User-Agent: {get_random_user_agent()}",
-                "-t", "5",
                 "-rl", "30"
             ],
             timeout=timeout,
