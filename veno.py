@@ -63,7 +63,7 @@ def color(text, c, bold=False, bg=None):
         if bold: style.append('1')
         if c in codes: style.append(codes[c])
         if bg == 'black': style.append('40')
-        if not style: style = ['0']
+        if not style: style.append('0')
         return f"\033[{';'.join(style)}m{text}\033[0m"
     tag = c
     if bold: tag = f"bold {c}"
@@ -78,7 +78,7 @@ def print_banner():
             if console:
                 console.print(color(val, "green", bold=True))
             else:
-                print("\033[1;32m" + val + "\033[0m")
+                print(color(val, "green", bold=True))
     except Exception as e:
         print(f"[!] Failed to print banner: {e}")
 
@@ -93,42 +93,31 @@ def print_usage():
         print(tail)
 
 def print_help():
-    lines = [
-        "\n" + color("VENO Automated Recon Shell - Full Help", "magenta", bold=True) + "\n",
-        "  " + color("show options", "cyan", "green")
-        "      Prints all current settings and scan parameters.",
-        "  " + color("set <option> <value>", "cyan", "blue")
-        "      Set a scan option. Options include:",
-        "        " + color("domain", "yellow", bold=True) + "       - Target domain to scan (e.g., set domain example.com),
-        "        " + color("yellow", bold=True),
-        + "       - Output directory for results (default: output_dir),
-        "        " + color("threads", "yellow", bold=True),
-        + "      - Number of threads/tools to use (e.g., set threads 10),
-        "        " + color("wordlist", "yellow", bold=True),
-        + "     - Custom wordlist path for fuzzing/discovery,
-        "        " + color("subscan", "yellow", bold=True),
-        + "      - true/false to enable/disable subdomain scan,
-        - "        " + color("intensity", "yellow", bold=True),
-        + "    - Scan profile (see below)",
-        "      " + 
-        "      Example: set domain example.com",
-        "      Example: set intensity medium",
-        "      Example: set threads 50\n",
-        "  \n" + color("run", "cyan", "green),
-        "      Launches the full scan with the current config.",
-        "  " + color("save config <filename>", "cyan", bold=True),
-        "      Saves current config to a file.",
-        "  " + color("timer", "cyan", bold=True),
-        "      Show session elapsed time.",
-        "  " + color("clear", "cyan", "blue),
-        "      Clears the screen .",
-        "  " + color("help", "cyan", bold=True),
-        "      Show this help message at any time.",
-        "  " + color("exit", "cyan", bold=True),
-        "      or " + color("quit", "cyan", bold=True),
-        "      Leave the shell.\n",
-        color("Scan Intensities (affect wordlist, tools, and tools used):", "magenta", bold=True) + "\n"
-    ]
+    help_text = f"""
+{color('VENO Automated Recon Shell - Full Help', 'magenta', bold=True)}
+
+  {color('show options', 'cyan')}      - Prints all current settings and scan parameters.
+  {color('set <option> <value>', 'cyan')} - Set a scan option. Options:
+    - {color('domain', 'yellow', bold=True)}     - Target domain to scan (e.g., set domain example.com)
+    - {color('output_dir', 'yellow', bold=True)} - Output directory for results (default: output)
+    - {color('threads', 'yellow', bold=True)}    - Number of threads/tools to use (default: 10)
+    - {color('wordlist', 'yellow', bold=True)}   - Custom wordlist path for fuzzing/discovery
+    - {color('subscan', 'yellow', bold=True)}   - true/false to enable/disable subdomain scan
+    - {color('intensity', 'yellow', bold=True)} - Scan profile: light, medium, heavy (default: medium)
+      Example: set domain example.com
+      Example: set intensity medium
+
+  {color('run', 'cyan')}              - Launches the scan with the current config.
+  {color('save config <filename>', 'cyan')} - Saves current config to a file.
+  {color('timer', 'cyan')}            - Show session elapsed time.
+  {color('clear', 'cyan')}            - Clears the screen.
+  {color('meme', 'cyan')}             - Display a random ASCII meme.
+  {color('insult', 'cyan')}           - Display a random insult.
+  {color('help', 'cyan')}             - Show this help message.
+  {color('exit', 'cyan')} or {color('quit', 'cyan')} - Exit the shell.
+
+  {color('Scan Intensities:', 'magenta', bold=True)}:
+"""
     for key, profile in SCAN_INTENSITIES.items():
         features = []
         if profile.get("run_nuclei_full"): features.append("extended nuclei")
@@ -136,22 +125,23 @@ def print_help():
         if profile.get("xsstrike"): features.append("xsstrike")
         if profile.get("run_sqlmap"): features.append("sqlmap")
         features_str = " | ".join(features)
-        lines.append(
-            f"    {color(key, 'yellow', bold=True)}: wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, threads={profile['threads'] if 'threads' in profile else 'N/A'}"
-            + (", " + features_str if features_str else ""))
-    lines += [
-        "\n  " + color("Example Usage:", "magenta", bold=True),
-        "      set domain example.com",
-        "      set intensity medium",
-        "      set threads 20",
-        "      run\n"
-    ]
+        help_text += (
+            f"    {color(key, 'yellow', bold=True)}: "
+            f"wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, "
+            f"threads={profile['threads'] if 'threads' in profile else 'N/A'}"
+            + (f", {features_str}" if features_str else "") + "\n"
+        )
+    help_text += f"""
+  {color('Example Usage:', 'magenta', bold=True)}:
+      set domain example.com
+      set intensity medium
+      set threads 20
+      run
+"""
     if console:
-        for line in lines:
-            console.print(line)
+        console.print(help_text)
     else:
-        for line in lines:
-            print(line)
+        print(help_text)
 
 def show_options(config):
     """Display only core configuration options."""
@@ -202,7 +192,7 @@ def save_config(config, filename):
                 else:
                     print(color("[VENO] Save cancelled.", "yellow", bold=True))
                 return
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
         if console:
             console.print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
@@ -238,9 +228,9 @@ def main():
             console.print(msg)
             console.print(border)
         else:
-            print("\033[1;35m" + "─" * 65 + "\033[0m")
+            print(border)
             print(msg)
-            print("\033[1;35m" + "─" * 65 + "\033[0m")
+            print(border)
     except Exception as e:
         err = color(f"[VENO] Dependency check failed: {e}", "red", bold=True, bg="black")
         if console:
@@ -258,6 +248,7 @@ def main():
         "output_dir": "output",
         "subscan": True,
         "intensity": default_intensity,
+        #"dir_fuzz_tool": "dirsearch"  # Default to dirsearch
     }
 
     if default_intensity in SCAN_INTENSITIES:
@@ -301,8 +292,8 @@ def main():
             print_usage()
             continue
         elif cmd.startswith("save config "):
-            _, _, filename = cmd.partition(" ")
-            filename = filename.strip().split(" ", 1)[-1]
+            _, _, filename = cmd.partition("save config ")
+            filename = filename.strip()
             if filename:
                 save_config(config, filename)
             else:
@@ -320,7 +311,7 @@ def main():
             else:
                 print(msg)
         elif cmd.startswith("set "):
-            parts = cmd.split()
+            parts = cmd.split(maxsplit=2)
             if len(parts) < 3:
                 err = color("Usage: set <option> <value>", "red", bold=True, bg="black")
                 if console:
@@ -329,7 +320,7 @@ def main():
                     print(err)
                 continue
             option = parts[1]
-            value = " ".join(parts[2:])
+            value = parts[2]
             if option == "threads":
                 if not validate_threads(value):
                     err = color("[VENO] threads must be an integer between 1 and 1000", "red", bold=True, bg="black")
@@ -339,7 +330,7 @@ def main():
                         print(err)
                     continue
                 config["threads"] = int(value)
-            elif option == "output":
+            elif option == "output_dir":
                 config["output_dir"] = safe_path(value)
             elif option == "wordlist":
                 if not os.path.isfile(value):
@@ -378,23 +369,36 @@ def main():
                     print(err)
                 continue
             ensure_output_dirs(config)
+            error_log = os.path.join(config["output_dir"], config["domain"], "errors.log")
             if console:
                 console.print(color("[VENO] Starting scan...", "yellow", bold=True))
             else:
                 print(color("[VENO] Starting scan...", "yellow", bold=True))
             try:
+                if HAS_MEMES:
+                    meme = get_ascii_meme()
+                    if console:
+                        console.print(meme)
+                    else:
+                        print(meme)
                 run_scanner(config["domain"], config)
                 msg = color("[VENO] Scan completed successfully.", "green", bold=True)
                 if console:
                     console.print(msg)
+                    if HAS_MEMES:
+                        console.print(get_ascii_meme())
                 else:
                     print(msg)
+                    if HAS_MEMES:
+                        print(get_ascii_meme())
             except Exception as e:
-                err = color(f"[VENO] Scan failed: {e}", "red", bold=True, bg="black")
+                err = f"Scan failed: {e}"
+                with open(error_log, "a", encoding='utf-8') as ferr:
+                    ferr.write(err + "\n")
                 if console:
-                    console.print(err)
+                    console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
                 else:
-                    print(err)
+                    print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
         elif cmd == "meme" and HAS_MEMES:
             meme = get_ascii_meme()
             if console:
