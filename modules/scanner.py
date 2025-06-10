@@ -114,12 +114,10 @@ def run_scanner(domain, config_overrides=None, context=None):
         logging.error(f"[VENO] Configuration error: {e}")
         return context
 
-    # Display minimal scan start message
+    # Display scan start message and meme
     print_status(f"\n[VENO] Starting scan for: {domain}", "yellow")
     print_status("-" * 65, "magenta")
-
-    if HAS_MEMES:
-        print_status(get_ascii_meme(), "yellow")
+    print_status(get_ascii_meme(), "yellow")
 
     scanner_steps = get_steps_for_intensity(intensity)
     total_steps = len(scanner_steps)
@@ -161,7 +159,7 @@ def run_scanner(domain, config_overrides=None, context=None):
                 logging.error(msg)
                 failures.append((step_name, str(e)))
 
-    # Scan completion summary
+    # Scan completion summary and meme
     elapsed = int(time.time() - start_time)
     if failures:
         print_error(f"[VENO] Scan completed with {len(failures)} failed steps in {elapsed}s:")
@@ -169,10 +167,7 @@ def run_scanner(domain, config_overrides=None, context=None):
             print_error(f"  {step}: {err}")
     else:
         print_success(f"[VENO] Scan completed successfully in {elapsed}s with no failures!")
-
-    if HAS_MEMES:
-        print_status(get_insult(), "magenta")
-        print_status(get_ascii_meme(), "green")
+    print_status(get_ascii_meme(), "yellow")
 
     logging.info(f"[VENO] Scan completed for {domain} at {time.ctime(time.time())}")
     context["failures"] = failures
