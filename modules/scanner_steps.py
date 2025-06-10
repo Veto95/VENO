@@ -424,40 +424,61 @@ def step_param_discovery(domain, config, context):
     outdir = config.get("output_dir", "output")
     intensity = config.get("intensity", "medium")
     domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+
     paramspider_out = os.path.join(domain_dir, "paramspider.txt")
     arjun_out = os.path.join(domain_dir, "arjun.txt")
     error_log = os.path.join(domain_dir, "errors.log")
     vulnerable_urls = set()
 
+    # Add a delay to control load
     random_delay(intensity)
-    stdout = run_command(
-        ["paramspider", "-d", domain, ">", paramspider_out],
-        timeout=300,
-        error_log=error_log,
-        capture_output=True
-    )
-    if stdout and os.path.isfile(paramspider_out):
-        urls = set()
+
+    # Run ParamSpider safely and capture output directly
+    try:
+        with open(paramspider_out, "w", encoding='utf-8') as fout:
+            run_command(
+                ["paramspider", "-d", domain],
+                timeout=300,
+                error_log=error_log,
+                capture_output=False,
+                stdout=fout
+            )
+    except Exception as e:
+        logger.error(f"ParamSpider failed: {e}")
+        with open(paramspider_out, "w", encoding='utf-8') as fout:
+            fout.write("ParamSpider execution failed.\n")
+
+    urls = set()
+    if os.path.isfile(paramspider_out):
         try:
             with open(paramspider_out, "r", encoding='utf-8') as f:
                 for line in f:
                     if "http" in line.lower() and "=" in line:
                         urls.add(line.strip())
+
             if urls:
+                # Rewrite clean output
                 with open(paramspider_out, "w", encoding='utf-8') as fout:
                     fout.write(f"# Parameter URLs for {domain}\n")
                     for url in sorted(urls):
                         fout.write(f"{url}\n")
-                with open("arjun_urls.txt", "w", encoding='utf-8') as f:
+
+                arjun_input = os.path.join(domain_dir, "arjun_urls.txt")
+                with open(arjun_input, "w", encoding='utf-8') as f:
                     for url in urls:
                         f.write(url + "\n")
+
                 random_delay(intensity)
-                stdout = run_command(
-                    ["arjun", "-i", "arjun_urls.txt", "-oT", arjun_out, "-t", "10", "-d", "0.5"],
+
+                # Run Arjun
+                run_command(
+                    ["arjun", "-i", arjun_input, "-oT", arjun_out, "-t", "10", "-d", "0.5"],
                     timeout=300,
                     error_log=error_log,
                     capture_output=True
                 )
+
                 if os.path.isfile(arjun_out):
                     with open(arjun_out, "r", encoding='utf-8') as f:
                         for line in f:
@@ -465,24 +486,22 @@ def step_param_discovery(domain, config, context):
                                 match = re.search(r"(http\S+)", line)
                                 if match:
                                     vulnerable_urls.add(match.group(1))
-                try:
-                    os.remove("arjun_urls.txt")
-                except:
-                    pass
+
+                os.remove(arjun_input)
             else:
                 with open(paramspider_out, "w", encoding='utf-8') as fout:
                     fout.write("No parameters found by ParamSpider.\n")
         except Exception as e:
+            logger.error(f"Error processing ParamSpider output: {e}")
             try:
                 with open(error_log, "a", encoding='utf-8') as ferr:
-                    ferr.write(f"Failed to process paramspider output: {e}\n")
-            except Exception as log_err:
-                logger.error(f"Failed to write to error log {error_log}: {log_err}")
-            logger.error(f"Failed to process paramspider output: {e}")
+                    ferr.write(f"[ParamSpider output parsing error]: {e}\n")
+            except Exception as ferr_err:
+                logger.error(f"Could not write to error log: {ferr_err}")
     else:
         with open(paramspider_out, "w", encoding='utf-8') as fout:
             fout.write("No parameters found by ParamSpider.\n")
-        logger.warning("No parameters found by ParamSpider.")
+        logger.warning("ParamSpider did not generate output.")
 
     context['vuln_urls'] = list(sorted(vulnerable_urls))
     print_found("Parameter discovery URLs", len(vulnerable_urls), len(vulnerable_urls))
