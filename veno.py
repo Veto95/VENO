@@ -176,15 +176,19 @@ def print_help():
             print(line)
 
 def show_options(config):
+    """Display only core configuration options."""
+    core_keys = ['domain', 'output_dir', 'threads', 'wordlist', 'subscan', 'intensity']
     msg = color("\nCurrent VENO options:", "green", bold=True)
     if console:
         console.print(msg)
-        for k, v in config.items():
+        for k in core_keys:
+            v = config.get(k, 'N/A')
             console.print(color(f"  {k}: {v}", "cyan"))
         console.print("")
     else:
         print(msg)
-        for k, v in config.items():
+        for k in core_keys:
+            v = config.get(k, 'N/A')
             print(color(f"  {k}: {v}", "cyan"))
         print("")
 
