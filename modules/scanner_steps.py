@@ -592,7 +592,7 @@ def step_dir_fuzz(domain, config, context):
         threads = 20
         timeout = 900
 
-    tool = config.get("dir_fuzz_tool", "ffuf")
+    tool = config.get("dir_fuzz_tool", "dirsearch")
 
     if tool == "dirsearch":
         random_delay(intensity)
@@ -716,7 +716,7 @@ def step_nuclei_chain(domain, config, context):
     start_time = timer_start()
     outdir = config.get("output_dir", "output")
     intensity = config.get("intensity", "medium")
-    timeout = 300 if intensity == "light" else 600
+    timeout = 600 if intensity == "light" else 1000
     domain_dir = os.path.join(outdir, domain)
     error_log = os.path.join(domain_dir, "errors.log")
     nuclei_targets = set()
