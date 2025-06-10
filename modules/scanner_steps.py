@@ -206,7 +206,7 @@ def step_wayback_urls(domain, config, context):
     random_delay(intensity)
     stdout = run_command(
         ["waybackurls", domain],
-        timeout=600,
+        timeout=900,
         error_log=error_log,
         capture_output=True
     )
@@ -220,7 +220,7 @@ def step_wayback_urls(domain, config, context):
         random_delay(intensity)
         stdout = run_command(
             ["gau", domain, "--threads", "5"],
-            timeout=300,
+            timeout=500,
             error_log=error_log,
             capture_output=True
         )
@@ -419,7 +419,7 @@ def step_param_discovery(domain, config, context):
     # Paramspider with corrected output
     random_delay(intensity)
     stdout = run_command(
-        ["paramspider", "-d", domain, "--output", domain_dir, "--silent"],
+        ["paramspider", "-d", domain, ">", domain_dir],
         timeout=300,
         error_log=error_log,
         capture_output=True
@@ -662,7 +662,7 @@ def step_sqlmap(domain, config, context):
                 "--random-agent",
                 "--delay", "0.5",
                 "--timeout", "5",
-                "--tamper", "space2comment"
+                "--tamper", "space2comment", "spacebetween"
             ],
             timeout=timeout,
             error_log=error_log,
