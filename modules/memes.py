@@ -3,183 +3,128 @@ import random
 def get_ascii_meme():
     memes = [
         r"""
-     |\_/|                  
-     | @ @   Woof!         
-     |   <>              _ 
-     |  _/\------____ ((| |))
-     |               `--' |   
- ____|_       ___|   |___.' 
-/_/_____/____/_______|
+     (\(\
+    ( -.-)  *BEEP*
+    o_(")(")  - Bunny deploying payload...
 """,
         r"""
-      ( ͡° ͜ʖ ͡°)つ──☆*:・ﾟ✧
-      HACK THE PLANET
+  ( ͡° ͜ʖ ͡°)つ──☆*:・ﾟ✧
+  HACK THE PLANET, BABY
 """,
         r"""
-    ──────▄▄▄▄▄▄────────
-    ──▄▄██████████▄▄────
-    ▄████████████████▄──
-    █████▀▀▀▀▀▀▀▀█████──
-    ████▀░░░░░░░░▀████──
-    ████▄░░░░░░░▄█████──
-    ▀███████████████▀───
-    ──▀███████████▀─────
-    ──────▀▀▀▀▀─────────
-      You got this!
+    ┌[ ⛧ ]─────────────
+    │  SYSTEM BREACH
+    └─> Root access granted
 """,
         r"""
-     _____  _____  _____
-    |  __ \|  __ \|  __ \
-    | |__) | |__) | |__) |  OWNED
-    |  ___/|  _  /|  ___/
-    | |    | | \ \| |      
-    |_|    |_|  \_\_|
+      .----.
+     / .-"-.\
+    | | '\ \ \
+     \ \_\/ /_/
+      '-._.-'
+   INITIATING SCAN: STEALTH MODE
 """,
         r"""
-    (╯°□°）╯︵ ┻━┻ 
-    Flip a table, then flip some bugs!
+    ╔═╗┌─┐┬┌─┌─┐┌┬┐┬ ┬
+    ╠═╝├┤ ├┴┐├┤  │ │ │
+    ╩  └─┘┴ ┴└─┘ ┴ └─┘
+    YOU'RE INSIDE. ACT NATURAL.
 """,
         r"""
-       __      ___      _ 
-      / /  ___| _ )_  _| |
-     / /  (_-< _ \ || | |
-    /_/  /__/___/\_,_|_|
-    YOU ARE ROOT, DEAL WITH IT
+    (▀̿Ĺ̯▀̿ ̿)  
+    WHO NEEDS PERMISSION?
+    ACCESS GRANTED.
 """,
         r"""
-    ┌( ಠ_ಠ)┘    ┌( ಠ_ಠ)┘    ┌( ಠ_ಠ)┘
-      DANCE WHILE YOU SCAN!
+    █▄█ █▀█ ▄▀█ █▀▄ █ █▄░█ █▀▀
+    █░█ █▀▄ █▀█ █▄▀ █ █░▀█ ██▄
+    BUG HUNT ACTIVE
 """,
         r"""
-           .--.
-         .'_\/_'.
-          '. /\ .'
-            "||"
-              ||
-              ||
-              XX
-              XX
-              XX
-             XXXX
-       ASCII CACTUS SAYS: HACK RESPONSIBLY
+    ⠀⠀⠀⠀⠀⣠⣾⣿⣿⣿⣿⣿⣷⣄
+    ⠀⠀⢀⣴⣿⠿⠋⠁⠀⠀⠀⠈⠻⣿⣦
+    ⠀⣾⣿⡟⠁⠀⠀⠀⠀⠀⠀⠀⠀⢻⣿
+    ⢸⣿⡇⠀⠀⠀VENO DEPLOYED⠀⠀⢸⣿
+    ⠘⣿⣧⣄⣀⣀⣀⣀⣀⣤⣴⣾⣿⠃
+    ⠀⠉⠻⠿⣿⣿⣿⣿⣿⠿⠋
 """,
         r"""
-    (▀̿Ĺ̯▀̿ ̿)  SCAN COMPLETE. 
-    YOU ARE THE DANGER.
+   ⠀⠀⠀⣀⣀⣀⣤⣤⣤⣤⣀⡀
+   ⠀⣴⣿⠿⠿⠿⠿⢿⣿⣿⣿⣿⣦⡀
+   ⣿⣿⡇⠀⠀⠀⠀⠀⠈⠙⣿⣿⣿⣿
+   ⠉⠉⠀⠀⢀⣴⣿⣷⡄⠀⠀⠉⠉
+   ↳ PAYLOAD READY. LET IT RIP.
 """,
         r"""
-    ──────────────▄██████████▄────────
-    ────────▄███▓▓▓▓▓▓▓▓▓▓▓███▄──────
-    ──────▄██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██─────
-    ─────██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██─────
-    ─────██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██─────
-    ─────██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██─────
-    ──────██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██──────
-    ───────███▓▓▓▓▓▓▓▓▓▓▓▓███───────
-    ─────────█████████████──────────
-    HACKERMAN LEVEL: OVER 9000
+   [0x01] NMAP LOADED
+   [0x02] SQLMAP INIT
+   [0x03] VENO ONLINE
+   [OK] Let's break the internet.
 """,
         r"""
-    ⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⣤⣀⡀
-    ⠀⠀⠀⠀⠀⣠⣾⣿⣿⣿⣿⣿⣿⣷⣄
-    ⠀⠀⠀⣴⣿⣿⡿⠟⠛⠛⠻⠿⣿⣿⣿⣦
-    ⠀⠀⣼⣿⡟⠁⠀⠀⠀⠀⠀⠀⠈⢻⣿⣿⣧
-    ⠀⢸⣿⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢹⣿⣿
-    ⠀⣿⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣿
-    ⠀⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿
-    ⠀⢿⣿⣦⣄⣀⣀⣀⣀⣤⣴⣾⣿⡿
-    ⠀⠀⠙⠻⠿⣿⣿⣿⣿⡿⠿⠛⠁
-    VENO SEES ALL. CODE HARDER.
+    ☠ SYSTEM OVERRIDE ☠
+    Root dance: (ง ͠° ͟ل͜ ͡°)ง
+    BOOPING FIREWALLS SINCE 20XX
 """,
         r"""
-   /\_/\  
-  ( o.o ) 
-   > ^ <    CAT SCANS YOUR BUGS
+    ✧･ﾟ: *✧･ﾟ:* 　　 *:･ﾟ✧*:･ﾟ✧
+     .----.     .--------.
+    | == |     | VENO 🐍 |
+    |----|     | ACTIVE  |
+    '----'     '--------'
+    ✧･ﾟ: *✧･ﾟ:* 　　 *:･ﾟ✧*:･ﾟ✧
 """,
         r"""
-    _______________________
-   /  IN LINUX WE TRUST!  /
-  /----------------------/
- /   (╯°□°）╯︵ ┻━┻     
-/______________________/
+  [🦠] RCE LAUNCHED
+  [🔥] FIREWALL BYPASSED
+  [💀] SYSADMIN SWEATING
 """,
         r"""
-    ＿人人人人人人人＿
-    ＞　EXPLOIT TIME　＜
-    ￣Y^Y^Y^Y^Y^Y^Y￣
-""",
-        r"""
-   _____   _____ 
-  / ____| |  __ \
- | |  __  | |__) |___   ___ 
- | | |_ | |  _  // _ \ / _ \
- | |__| | | | \ \ (_) |  __/
-  \_____| |_|  \_\___/ \___|
-   YOU CAN (AND WILL) HACK THIS
-""",
-        r"""
-    (ノಠ益ಠ)ノ彡┻━┻
-    TABLE FLIPPED. BUGS FEAR YOU.
-""",
-        r"""
-    ┏(-_-)┛┗(-_-﻿ )┓┗(-_-)┛
-    SCAN LIKE YOU MEAN IT!
-""",
-        r"""
-    ¯\_(ツ)_/¯  NO VULNS? PATCH IT AGAIN
-""",
-        r"""
-    (ง'̀-'́)ง    COME AT ME, CVEs!
-""",
-        r"""
-    /////////////////
-    //    HACK    //
-    //   THE      //
-    //  PLANET!   //
-    /////////////////
-""",
-        r"""
-    (☞ﾟヮﾟ)☞  YOU'RE A LEGEND
-""",
-        r"""
-    ( •_•)>⌐■-■  (⌐■_■)
-    SCANNING IN STYLE
-""",
-        r"""
-    .----.
-   /      \
-  |        |
-   \      /
-    '----'
-   THE BUG IS A LIE
-""",
-        r"""
-    ░░░░░░░░░░░░░░░
-    ░░░░▄░░░░▄░░░░░
-    ░░░░░▀▄▀░░░░░░░
-    ░░░░░░░░░░░░░░░
-    LINUX PENGUIN BLESSING
+   _______________________
+  < VENO SAYS: STAY EVIL >
+   -----------------------
+          \   ^__^
+           \  (oo)\_______
+              (__)\       )\/\
+                  ||----w |
+                  ||     ||
 """,
     ]
     return random.choice(memes)
+import random
 
-def get_insult():
-    insults = [
-        "Scan complete. If you find bugs, buy yourself a cookie. If not, blame your wordlist.",
-        "You just hacked the planet. Or at least you tried.",
-        "Bugs found? Hell yeah! No bugs? Try harder.",
-        "VENO finished. Go touch grass, nerd.",
-        "Scan done! If there’s anything left, it’s probably a firewall. Or your fault.",
-        "VENO: Making bug bounty hunters look good since right now.",
-        "Another one bites the dust. Or maybe you just bit the dust. Check the report.",
-        "You scan like a boss. Or at least like an intern with caffeine.",
-        "VENO finished scanning. Your move, script kiddie.",
-        "Report generated. Did you break the internet? If no, try again.",
-        "If you didn't find anything, it's not VENO's fault. Blame the sysadmin.",
-        "If you see this message, congrats! You're officially a professional button pusher.",
-        "Another scan, another day closer to burnout.",
-        "Scan finished. If you didn't break anything, you're not trying hard enough.",
-        "You survived the scan. Now go outside and see the sun, you pale hacker.",
-        "VENO says: 'Good job!' (But secretly, it did all the work.)"
+def get_insults():
+    lines = [
+        "🐧 Linux is not a hobby. It's a personality.",
+        "📡 If nmap was a religion, you'd be a high priest.",
+        "🎯 Payload loaded. Target unaware. Hacker satisfied.",
+        "👾 You don’t find bugs. They reveal themselves to you.",
+        "🧠 grep, sed, awk — the holy trinity.",
+        "📁 I came. I saw. I `ls -la`’d.",
+        "🔥 Your exploit worked. The logs never knew.",
+        "🐚 Real hackers don’t click — they curl.",
+        "⚔️ WAFs fear what they can't parse.",
+        "🛸 Hacked so clean, even the IDS said ‘respect’.",
+        "🔍 You don’t brute force — you socially engineer the ports open.",
+        "🧙‍♂️ Sudo gave you root. But Linux gave you purpose.",
+        "☠️ `rm -rf /` is a love letter in hacker-speak.",
+        "🌐 Every URL hides a secret. You’re the keymaster.",
+        "🤫 Bash history never tells the full story.",
+        "⚙️ If it runs `cron`, you already own it.",
+        "📜 Logs are just confessionals for misconfigured servers.",
+        "🐍 Python wasn’t made for hacking. You were.",
+        "🔓 Uptime is just a countdown to your next shell.",
+        "💻 They said it was patched. You said, 'Challenge accepted.'",
+        "🕵️‍♂️ Dirbuster is just therapy with better wordlists.",
+        "🚪 No vuln? No problem. You brute force the idea of access.",
+        "💽 Hackers don’t die. They fork.",
+        "💥 SIGKILL is how we say goodbye.",
+        "🧨 One payload to rule them all. One misconfig to bind them.",
+        "🔗 curl | bash. Because downloading responsibly is for civilians.",
+        "🧃 Sipping coffee, piping stdout to glory.",
+        "🧰 Tools don’t hack. Hackers bend tools to their will.",
+        "🎮 Linux is the only game where root is the final boss.",
+        "👣 `whoami` — identity crisis edition.",
+        "🎙️ Logging out is for the weak. Real hackers `screen -d -r`.",
     ]
-    return random.choice(insults)
+    return random.choice(lines)
