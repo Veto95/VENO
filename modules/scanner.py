@@ -64,8 +64,13 @@ def validate_config(config, domain):
     if missing_keys:
         raise ValueError(f"Missing required config keys: {', '.join(missing_keys)}")
     
-    if not os.path.isdir(os.path.dirname(config['output_dir'])):
-        raise ValueError(f"Invalid output directory: {config['output_dir']}")
+    # Resolve output_dir to absolute path
+    output_dir = os.path.abspath(config['output_dir'])
+    config['output_dir'] = output_dir  # Update config with absolute path
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except OSError as e:
+        raise ValueError(f"Cannot create output directory: {output_dir} ({e})")
     
     if config['wordlist'] and not os.path.isfile(config['wordlist']):
         raise ValueError(f"Wordlist file not found: {config['wordlist']}")
@@ -109,26 +114,19 @@ def run_scanner(domain, config_overrides=None, context=None):
         logging.error(f"[VENO] Configuration error: {e}")
         return context
 
-    # Display scan settings
+    # Display minimal scan start message
     print_status(f"\n[VENO] Starting scan for: {domain}", "yellow")
-    print_status(f" - Output directory: {config['output_dir']}", "magenta")
-    print_status(f" - Wordlist: {config['wordlist'] or 'Default'}", "cyan")
-    print_status(f" - Threads: {config['threads']}", "blue")
-    print_status(f" - Subdomain scan: {'enabled' if config['subscan'] else 'disabled'}", "green")
-    print_status(f" - Intensity: {intensity} — {profile.get('description', '')}", "yellow")
     print_status("-" * 65, "magenta")
-
-    os.makedirs(config["output_dir"], exist_ok=True)
-
-    failures = []
-    def step_nice(step):
-        return step.__name__.replace("step_", "").replace("_", " ").title()
 
     if HAS_MEMES:
         print_status(get_ascii_meme(), "yellow")
 
     scanner_steps = get_steps_for_intensity(intensity)
     total_steps = len(scanner_steps)
+    failures = []
+
+    def step_nice(step):
+        return step.__name__.replace("step_", "").replace("_", " ").title()
 
     if Progress:
         with Progress(
