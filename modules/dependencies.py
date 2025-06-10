@@ -4,7 +4,6 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ---- Try to match VENO's color/console system ----
 try:
     from rich.console import Console
     RICH_AVAILABLE = True
@@ -27,7 +26,6 @@ def color(text, c, bold=False, bg=None):
     if bg: tag += f" on {bg}"
     return f"[{tag}]{text}[/{tag}]"
 
-# ---- CONSTANTS ----
 TOOL_INSTALL_CMDS = {
     "theHarvester": "sudo apt install -y theharvester",
     "subfinder": "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
@@ -61,11 +59,16 @@ ERROR_LOG = "dependency_error.log"
 MAX_THREADS = 8
 
 def log_error(message, output_dir=None):
-    """Log installation errors to a file."""
     log_dir = output_dir if output_dir else "."
     err_path = os.path.join(log_dir, ERROR_LOG)
-    with open(err_path, "a") as f:
-        f.write(message + "\n")
+    try:
+        with open(err_path, "a", encoding='utf-8') as f:
+            f.write(message + "\n")
+    except Exception as e:
+        if console:
+            console.print(color(f"[VENO] Failed to log error to {err_path}: {e}", "red", bold=True))
+        else:
+            print(color(f"[VENO] Failed to log error to {err_path}: {e}", "red", bold=True))
 
 def print_status(msg):
     m = color("[VENO]", "cyan", bold=True) + " " + color(msg, "white")
@@ -83,11 +86,9 @@ def print_error(msg):
     else: print(m)
 
 def check_tool(tool):
-    """Check if a tool is available in PATH."""
     return tool if shutil.which(tool) is None else None
 
 def check_missing_tools_parallel():
-    """Check all required tools in parallel. Returns list of missing."""
     missing = []
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         futures = {executor.submit(check_tool, tool): tool for tool in REQUIRED_TOOLS}
@@ -98,7 +99,6 @@ def check_missing_tools_parallel():
     return missing
 
 def install_tool(tool, output_dir=None):
-    """Try to install a tool, log errors if it fails."""
     print_status(f"Installing {tool} ...")
     try:
         subprocess.run(TOOL_INSTALL_CMDS[tool], shell=True, check=True)
@@ -111,10 +111,6 @@ def install_tool(tool, output_dir=None):
         raise
 
 def check_and_prompt_install(output_dir=None):
-    """
-    Check all required tools. If missing, prompt user for mass install.
-    Fails gracefully and logs to output if install fails.
-    """
     missing = check_missing_tools_parallel()
     if not missing:
         return True
@@ -140,8 +136,4 @@ def check_and_prompt_install(output_dir=None):
     return True
 
 def check_dependencies(output_dir=None):
-    """
-    Main entry: checks and installs dependencies as needed.
-    Intended to be called from veno.py/main.py.
-    """
     check_and_prompt_install(output_dir)
