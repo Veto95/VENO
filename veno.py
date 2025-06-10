@@ -180,15 +180,11 @@ def show_options(config):
     if console:
         console.print(msg)
         for k, v in config.items():
-            if k == "scan_config":
-                continue
             console.print(color(f"  {k}: {v}", "cyan"))
         console.print("")
     else:
         print(msg)
         for k, v in config.items():
-            if k == "scan_config":
-                continue
             print(color(f"  {k}: {v}", "cyan"))
         print("")
 
@@ -200,11 +196,8 @@ def merge_intensity(config, intensity):
         return
     profile = SCAN_INTENSITIES[intensity]
     config["intensity"] = intensity
-    config["wordlist"] = profile.get("wordlist", "")
-    config["scan_config"]["threads"] = profile.get("threads", 20)
     for key in profile:
-        if key in ("wordlist", "threads"): continue
-        config["scan_config"][key] = profile[key]
+        config[key] = profile[key]
 
 def ensure_output_dirs(config):
     domain = config.get("domain")
@@ -227,11 +220,8 @@ def save_config(config, filename):
                 else:
                     print(color("[VENO] Save cancelled.", "yellow", bold=True))
                 return
-        to_save = config.copy()
-        if "scan_config" in to_save:
-            del to_save["scan_config"]
         with open(filename, 'w') as f:
-            json.dump(to_save, f, indent=2)
+            json.dump(config, f, indent=2)
         if console:
             console.print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
         else:
@@ -286,10 +276,6 @@ def main():
         "output_dir": "output",
         "subscan": True,
         "intensity": default_intensity,
-        "scan_config": {
-            "threads": 20,
-        },
-        "wordlist": "",
     }
 
     if default_intensity in SCAN_INTENSITIES:
@@ -370,7 +356,7 @@ def main():
                     else:
                         print(err)
                     continue
-                config["scan_config"]["threads"] = int(value)
+                config["threads"] = int(value)
             elif option == "output":
                 config["output_dir"] = safe_path(value)
             elif option == "wordlist":
@@ -413,6 +399,11 @@ def main():
             ascii_loader(color("[VENO] Starting scan...", "yellow", bold=True), duration=0.4)
             try:
                 run_scanner(config["domain"], config)
+                msg = color("[VENO] Scan completed successfully.", "green", bold=True)
+                if console:
+                    console.print(msg)
+                else:
+                    print(msg)
             except Exception as e:
                 err = color(f"[VENO] Scan failed: {e}", "red", bold=True, bg="black")
                 if console:
