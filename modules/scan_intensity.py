@@ -1,19 +1,9 @@
-"""
-VENO Intensity Profiles — Now With Even More Fucking Attitude!
------------------------------------------------------
-Defines scan intensity presets for the VENO recon suite.
-Change these if you want to crank it up, tone it down, or just meme.
-"""
-
 import os
 
-# Where all output files go by default
 DEFAULT_OUTPUT_DIR = "output"
-# Banner for the HTML report, customize or meme as desired
 DEFAULT_BANNER_HTML = "<h1>VENO Automated Bug Bounty Scan</h1>"
 
 def _check_wordlist(path):
-    """Warn if the wordlist is missing, but don't be a dick and crash."""
     if not os.path.isfile(path):
         print(f"\033[1;33m[WARNING]\033[0m Wordlist not found: {path} — you might be about to eat shit!")
 
@@ -63,14 +53,7 @@ SCAN_INTENSITIES = {
         "dalfox": True,
         "xsstrike": True,
     },
-    # Add your own custom intensity modes here!
-    # "your_custom_profile": {
-    #     "description": "Describe your meme mode.",
-    #     "wordlist": "/your/meme/list.txt",
-    #     ...
-    # }
 }
 
-# Automatically check wordlists for all profiles on import
 for mode, opts in SCAN_INTENSITIES.items():
     _check_wordlist(opts["wordlist"])
