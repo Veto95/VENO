@@ -172,7 +172,7 @@ def step_subdomain_enum(domain, config, context):
         # Subfinder
         random_delay(intensity)
         stdout = run_command(
-            ["subfinder", "-silent", "-d", domain, "-t", "10", "-timeout", "5"],
+            ["subfinder", "-silent", "-d", domain, "-t", "10", "-timeout", "100"],
             timeout=180,
             error_log=error_log,
             capture_output=True
@@ -337,42 +337,52 @@ def step_wayback_urls(domain, config, context):
 
     timer_end(start, "Wayback URLs")
 def step_waymore_urls(domain, config, context):
-    if context.get("skip", False):
+    if not config.get("run_waymore", False):
+        logger.info(f"[VENO] ⏭️ Skipping Waymore scan (intensity: {config.get('intensity', 'medium')})")
         return
+
     print_step("📜 Gathering URLs with Waymore")
     start = timer_start()
     outdir = config.get("output_dir", "output")
+    intensity = config.get("intensity", "medium")
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
-    waymore_out = os.path.join(domain_dir, "waymore.txt")
+
+    waymore_file = os.path.join(domain_dir, "waymore_urls.txt")
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     error_log = os.path.join(domain_dir, "errors.log")
 
-    try:
-        cmd = ["waymore", "-d", domain, "-o", waymore_out, "--subs", "-m"]
-        run_command(cmd, timeout=300, error_log=error_log)
+    urls = set()
+    random_delay(intensity)
 
-        extracted = set()
-        if os.path.isfile(waymore_out):
-            with open(waymore_out, "r", encoding="utf-8") as f:
-                for line in f:
-                    url = line.strip()
-                    if url:
-                        extracted.add(url)
+    stdout = run_command(
+        ["waymore", "-i", domain, "-oU", waymore_file, "-mode", "U"],
+        timeout=100,
+        error_log=error_log,
+        capture_output=True
+    )
 
-        with open(all_urls_file, "a", encoding="utf-8") as out:
-            for url in sorted(extracted):
-                out.write(url + "\n")
+    # Load from output file if it exists, otherwise fallback to stdout
+    if os.path.isfile(waymore_file):
+        with open(waymore_file, "r", encoding="utf-8") as f:
+            urls.update(line.strip() for line in f if line.strip())
+    elif stdout:
+        urls.update(line.strip() for line in stdout.splitlines() if line.strip())
 
-        print_found("Waymore URLs", len(extracted))
-        context.setdefault("urls", []).extend(sorted(extracted))
+    # Save to all_urls.txt
+    if urls:
+        with open(all_urls_file, "a", encoding="utf-8") as f:
+            for url in sorted(urls):
+                f.write(url + "\n")
 
-    except Exception as e:
-        alert_error(f"Waymore failed: {e}", error_log)
-        context.setdefault("failures", []).append(("Waymore", str(e)))
+        context.setdefault("urls", []).extend(sorted(urls))
+        print_found("Waymore URLs", len(urls))
+    else:
+        logger.warning("[VENO] ❗ Waymore found no URLs")
+        alert("Waymore", ["No URLs extracted"])
+        context.setdefault("failures", []).append(("Waymore", "No URLs found"))
 
     timer_end(start, "Waymore URL Collection")
-
 
 
 def step_parse_param_urls(domain, config, context):
@@ -426,72 +436,6 @@ def step_parse_param_urls(domain, config, context):
         context.setdefault("failures", []).append(("Param Parse", str(e)))
 
     timer_end(start, "Parameter URL Extraction")
-def step_probe_param_urls(domain, config, context):
-    if context.get("skip", False):
-        return
-    if config.get("intensity") == "light":
-        print_step("⏭️ Skipping param probing (intensity: light)")
-        return
-
-    print_step("📡 Probing parameter URLs with httprobe")
-    start = timer_start()
-    outdir = config.get("output_dir", "output")
-    domain_dir = os.path.join(outdir, domain)
-    os.makedirs(domain_dir, exist_ok=True)
-
-    param_urls_file = os.path.join(domain_dir, "param_urls.txt")
-    live_param_urls_file = os.path.join(domain_dir, "live_param_urls.txt")
-    error_log = os.path.join(domain_dir, "errors.log")
-    live_param_urls = set()
-
-    urls = context.get("param_urls", [])
-    if not urls and os.path.isfile(param_urls_file):
-        with open(param_urls_file, "r", encoding="utf-8") as f:
-            urls = [line.strip() for line in f if line.strip() and not line.startswith("all_urls.txt")]
-
-    if not urls:
-        with open(live_param_urls_file, "w", encoding="utf-8") as f:
-            f.write("No parameter URLs available for probing.\n")
-        logger.warning("No parameter URLs available.")
-        print_step("🚫 No parameter URLs to probe")
-        alert("Live Param Probe", ["Missing input URLs"])
-        context.setdefault("failures", []).append(("Probe Param URLs", "Missing input"))
-        return
-
-    try:
-        probe = subprocess.Popen(
-            ["httprobe", "-c", "50", "-t", "5000", "-p", "http:80,https:443"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        out, err = probe.communicate(input="\n".join(urls), timeout=120)
-
-        if err:
-            with open(error_log, "a", encoding="utf-8") as f:
-                f.write(f"[httprobe] stderr: {err}\n")
-
-        for line in out.splitlines():
-            if line.strip():
-                live_param_urls.add(line.strip())
-
-        with open(live_param_urls_file, "w", encoding="utf-8") as f:
-            for url in sorted(live_param_urls):
-                f.write(f"{url}\n")
-
-    except Exception as exc:
-        alert_error("httprobe failed for param URLs", error_log)
-        context.setdefault("failures", []).append(("Probe Param URLs", str(exc)))
-
-    context["live_param_urls"] = sorted(live_param_urls)
-    print_step(f"⚡ Live param URLs: {len(live_param_urls)}")
-    print_found("Live Param URLs", len(live_param_urls))
-
-    if not live_param_urls:
-        alert("Live Param URLs", ["None responded"])
-        context.setdefault("failures", []).append(("Live Param URLs", "0 live detected"))
-
-    timer_end(start, "Live Parameter URL Probing")
-
-
 
 def step_param_discovery(domain, config, context):
     if context.get("skip", False):
@@ -535,7 +479,8 @@ def step_param_discovery(domain, config, context):
     discovered = set()
     try:
         for url in urls:
-            cmd = ["arjun", "-u", url, "--get", "--silent"]
+            # Fixed command: Removed --get and --silent, added -q for quiet mode
+            cmd = ["arjun", "-u", url, "-q"]
             result = run_command(cmd, timeout=60, error_log=error_log, capture_output=True)
             if result:
                 for line in result.splitlines():
@@ -543,10 +488,10 @@ def step_param_discovery(domain, config, context):
                         discovered.add(line.strip())
         with open(arjun_out, "w", encoding="utf-8") as f:
             for url in sorted(discovered):
-                f.write(url + "")
+                f.write(url + "\n")
         with open(all_urls_file, "a", encoding="utf-8") as out:
             for url in sorted(discovered):
-                out.write(url + "")
+                out.write(url + "\n")
         print_found("Arjun Params", len(discovered))
         context.setdefault("urls", []).extend(sorted(discovered))
 
@@ -555,31 +500,77 @@ def step_param_discovery(domain, config, context):
         context.setdefault("failures", []).append(("Arjun", str(e)))
 
     timer_end(start, "Param Discovery")
-    return
+def step_probe_param_urls(domain, config, context):
+    if context.get("skip", False):
+        return
+    if config.get("intensity") == "light":
+        print_step("⏭️ Skipping param probing (intensity: light)")
+        return
 
-    discovered = set()
-    try:
-        for url in urls:
-            cmd = ["arjun", "-u", url, "--get", "--silent"]
-            result = run_command(cmd, timeout=60, error_log=error_log, capture_output=True)
+    print_step("📡 Probing parameter URLs with url_check (httprobe + curl fallback)")
+    start = timer_start()
+    outdir = config.get("output_dir", "output")
+    domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+
+    param_urls_file = os.path.join(domain_dir, "param_urls.txt")
+    live_param_urls_file = os.path.join(domain_dir, "live_param_urls.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
+    live_param_urls = set()
+
+    urls = context.get("param_urls", [])
+    if not urls and os.path.isfile(param_urls_file):
+        with open(param_urls_file, "r", encoding="utf-8") as f:
+            urls = [line.strip() for line in f if line.strip() and not line.startswith("all_urls.txt")]
+
+    if not urls:
+        with open(live_param_urls_file, "w", encoding="utf-8") as f:
+            f.write("No parameter URLs available for probing.\n")
+        logger.warning("No parameter URLs available.")
+        print_step("🚫 No parameter URLs to probe")
+        alert("Live Param Probe", ["Missing input URLs"])
+        context.setdefault("failures", []).append(("Probe Param URLs", "Missing input"))
+        return
+
+    sanitized_urls = []
+    for u in urls:
+        if not u.startswith(("http://", "https://")):
+            u = "http://" + u
+        sanitized_urls.append(u)
+
+    # Optional: keywords to scan for sensitive content in responses
+    sensitive_keywords = config.get("sensitive_keywords", [])
+
+    def probe_url(url):
+        try:
+            is_live, has_sensitive = url_check(url, keywords=sensitive_keywords)
+            if is_live:
+                return url
+        except Exception as e:
+            logger.debug(f"Error probing url {url}: {e}")
+        return None
+
+    # Run concurrent probes for speed
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        futures = {executor.submit(probe_url, url): url for url in sanitized_urls}
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
             if result:
-                for line in result.splitlines():
-                    if line.strip().startswith("http") and ("=" in line or "?" in line):
-                        discovered.add(line.strip())
-        with open(arjun_out, "w", encoding="utf-8") as f:
-            for url in sorted(discovered):
-                f.write(url + "")
-        with open(all_urls_file, "a", encoding="utf-8") as out:
-            for url in sorted(discovered):
-                out.write(url + "")
-        print_found("Arjun Params", len(discovered))
-        context.setdefault("urls", []).extend(sorted(discovered))
+                live_param_urls.add(result)
 
-    except Exception as e:
-        alert_error(f"Arjun crashed: {e}", error_log)
-        context.setdefault("failures", []).append(("Arjun", str(e)))
+    with open(live_param_urls_file, "w", encoding="utf-8") as f:
+        for url in sorted(live_param_urls):
+            f.write(f"{url}\n")
 
-    timer_end(start, "Param Discovery")
+    context["live_param_urls"] = sorted(live_param_urls)
+    print_step(f"⚡ Live param URLs: {len(live_param_urls)}")
+    print_found("Live Param URLs", len(live_param_urls))
+
+    if not live_param_urls:
+        alert("Live Param URLs", ["None responded"])
+        context.setdefault("failures", []).append(("Live Param URLs", "0 live detected"))
+
+    timer_end(start, "Live Parameter URL Probing")
 
 
 def step_hakrawler_crawl(domain, config, context):
@@ -691,7 +682,6 @@ def step_naabu_ports(domain, config, context):
     naabu_out = os.path.join(domain_dir, "naabu_ports.txt")
     error_log = os.path.join(domain_dir, "errors.log")
     ports = set()
-
     targets = context.get("live_subdomains", []) or [domain]
 
     if not shutil.which("naabu"):
@@ -699,31 +689,43 @@ def step_naabu_ports(domain, config, context):
         context.setdefault("failures", []).append(("Naabu", "Binary missing"))
         return
 
-    try:
-        port_range = "1-65535" if config.get("intensity") == "deep" else "80,443,8080,8443"
-        with open(naabu_out, "w", encoding="utf-8") as f:
-            for target in targets:
-                cmd = ["naabu", "-host", target, "-p", port_range, "-silent", "-rate", "500"]
+    for target in targets:
+        port_range = "1-65535"
+        cmd = ["naabu", "-host", target, "-p", port_range, "-silent", "-rate", "1000"]
+        try:
+            result = run_command(cmd, timeout=300, error_log=error_log, capture_output=True)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"[Naabu] Timeout on {target}, falling back to top-ports")
+            alert("Naabu Timeout", [f"{target} took too long, using fallback"])
+            cmd = ["naabu", "-host", target, "-top-ports", "1000", "-silent", "-rate", "1500"]
+            try:
                 result = run_command(cmd, timeout=180, error_log=error_log, capture_output=True)
-                if result:
-                    for line in result.splitlines():
-                        parts = line.strip().split(":")
-                        if len(parts) == 2 and parts[1].isdigit():
-                            port = parts[1]
-                            ports.add(port)
-                            f.write(f"{line.strip()}\n")
+            except Exception as e:
+                alert_error(f"Naabu fallback failed on {target}: {e}", error_log)
+                context.setdefault("failures", []).append((f"Naabu fallback: {target}", str(e)))
+                continue
+        except Exception as e:
+            alert_error(f"Naabu failed on {target}: {e}", error_log)
+            context.setdefault("failures", []).append((f"Naabu error: {target}", str(e)))
+            continue
 
-        context["open_ports"] = sorted(ports)
-        if ports:
-            print_found("Open Ports", len(ports))
-            alert("Open Ports", sorted(ports))
-        else:
-            logger.info("No open ports detected by Naabu.")
-            context.setdefault("failures", []).append(("Naabu", "0 ports"))
+        if result:
+            with open(naabu_out, "a", encoding="utf-8") as f:
+                for line in result.splitlines():
+                    parts = line.strip().split(":")
+                    if len(parts) == 2 and parts[1].isdigit():
+                        port = parts[1]
+                        ports.add(port)
+                        f.write(f"{line.strip()}\n")
 
-    except Exception as e:
-        alert_error(f"Naabu failed: {e}", error_log)
-        context.setdefault("failures", []).append(("Naabu", str(e)))
+    context["open_ports"] = sorted(ports)
+
+    if ports:
+        print_found("Open Ports", len(ports))
+        alert("Open Ports", sorted(ports))
+    else:
+        logger.info("No open ports detected by Naabu.")
+        context.setdefault("failures", []).append(("Naabu", "0 ports"))
 
     timer_end(start, "Port scan")
 
@@ -928,93 +930,6 @@ def step_scan_juicy_info(domain, config, context):
     timer_end(start, "Juicy info scan")
 
 
-def httprobe_is_live(url):
-    try:
-        # Run httprobe with concurrency 10, check if URL is alive
-        proc = subprocess.run(
-            ['httprobe', '-c', '10'],
-            input=url.encode(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=15
-        )
-        live_urls = proc.stdout.decode().splitlines()
-        # Match URL ignoring trailing slash
-        return any(url.rstrip('/') == live.rstrip('/') for live in live_urls)
-    except Exception as e:
-        logger.debug(f"httprobe error on {url}: {e}")
-        return False
-        
-
-def httprobe_is_live(url):
-    try:
-        # Run httprobe with concurrency 10, check if URL is alive
-        proc = subprocess.run(
-            ['httprobe', '-c', '10'],
-            input=url.encode(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=15
-        )
-        live_urls = proc.stdout.decode().splitlines()
-        # Match URL ignoring trailing slash
-        return any(url.rstrip('/') == live.rstrip('/') for live in live_urls)
-    except Exception as e:
-        logger.debug(f"httprobe error on {url}: {e}")
-        return False
-
-def url_check(url, keywords=None):
-    try:
-        is_live = httprobe_is_live(url)
-        if not is_live:
-            return False, False
-        if not keywords:
-            return True, False
-
-        headers = {"User-Agent": get_random_user_agent()}
-        proxy = get_proxy() or {}
-
-        r = requests.get(
-            url,
-            headers=headers,
-            proxies=proxy,
-            timeout=8,
-            allow_redirects=False,
-            verify=False
-        )
-        body = r.text.lower()
-        has_sensitive = any(kw.lower() in body for kw in keywords)
-        return True, has_sensitive
-    except Exception as exc:
-        logger.debug(f"url_check error on {url}: {exc}")
-        return False, False
-
-def url_check(url, keywords=None):
-    try:
-        is_live = httprobe_is_live(url)
-        if not is_live:
-            return False, False
-        if not keywords:
-            return True, False
-
-        headers = {"User-Agent": get_random_user_agent()}
-        proxy = get_proxy() or {}
-
-        r = requests.get(
-            url,
-            headers=headers,
-            proxies=proxy,
-            timeout=8,
-            allow_redirects=False,
-            verify=False
-        )
-        body = r.text.lower()
-        has_sensitive = any(kw.lower() in body for kw in keywords)
-        return True, has_sensitive
-    except Exception as exc:
-        logger.debug(f"url_check error on {url}: {exc}")
-        return False, False
-
 def step_advanced_xss(domain, config, context):
     if context.get("skip", False):
         return
@@ -1217,6 +1132,42 @@ def step_sqlmap(domain, config, context):
         alert("SQLMap", ["No SQLi detected or tool failed."])
 
     timer_end(start_time, "SQL injection scan")
+def url_check(url, keywords=None):
+    try:
+        # Step 1: Check liveness with httprobe
+        probe = subprocess.run(
+            ['httprobe', '-c', '10'],
+            input=f"{url}\n".encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=15
+        )
+        live_urls = probe.stdout.decode().splitlines()
+        if not any(url.rstrip('/') == live.rstrip('/') for live in live_urls):
+            return False, False
+
+        # Step 2: If no keywords, just return True (live, no keyword scan needed)
+        if not keywords:
+            return True, False
+
+        # Step 3: Use curl to fetch content and grep for keywords
+        curl_cmd = [
+            "curl", "-sL", "--max-time", "10", "--insecure", url
+        ]
+        curl_proc = subprocess.run(
+            curl_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=15
+        )
+        content = curl_proc.stdout.decode(errors="ignore").lower()
+        has_sensitive = any(kw.lower() in content for kw in keywords)
+
+        return True, has_sensitive
+
+    except Exception as e:
+        logger.debug(f"url_check error on {url}: {e}")
+        return False, False
 
 
 def step_dir_fuzz(domain, config, context):
@@ -1283,7 +1234,7 @@ def step_dir_fuzz(domain, config, context):
         try:
             run_command([
                 "dirsearch", "-u", f"https://{domain}",
-                "-w", wordlist, "-e", "*", "-t", str(config.get("threads", 10)),
+                "-w", wordlist, "-e", "php,html,aspx,jsp,json,xml,js,txt,log,bak,zip", "-t", str(config.get("threads", 10)),
                 "--plain-text-report", raw_out
             ], timeout=300, error_log=error_log)
 
@@ -1347,11 +1298,10 @@ def get_steps_for_intensity(intensity):
     if intensity in ["medium", "deep"]:
         steps.extend([
             step_waymore_urls,
+            step_hakrawler_crawl,
             step_parse_param_urls,
             step_probe_param_urls,
             step_subjack_takeover,
-            step_param_discovery,
-            step_hakrawler_crawl,
             step_scan_sensitive_files,
             step_scan_juicy_info,
             step_dir_fuzz,
