@@ -112,7 +112,7 @@ See [`requirements_tools.md`](requirements_tools.md) for a full list.
 
 ## 🤝 Community & Support
 
-- **Telegram Channel:** [HELL SHELL](https://t.me/hacking_hell1)
+- **Telegram Channel:** [HELL SHELL](https://t.me/H3LL_SH3LL)
 - **Telegram Contact:** [0xCACT2S](https://t.me/CACT2S)
 - **GitHub:** [github.com/Veto95/VENO](https://github.com/Veto95/VENO)
 
