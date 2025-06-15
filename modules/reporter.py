@@ -1,284 +1,623 @@
+
+# reporter.py — The Ultimate Hacker-Themed Scan Report Generator
+# Fully loaded with Chart.js graphs, status badges, collapsible sections,
+# JSON viewer & download, sidebar nav, fuzzy path sorting, SQLMap injection detail,
+# and dark-mode hacker aesthetics.
+
 import os
-import time
-import logging
-import html
-from datetime import datetime
+import json
+import datetime
+from collections import defaultdict
 
-try:
-    from rich.console import Console
-    RICH_AVAILABLE = True
-    console = Console()
-except ImportError:
-    RICH_AVAILABLE = False
-    console = None
+# === Utility functions ===
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
+def safe_get(d, key, default=None):
+    return d[key] if key in d else default
 
-def color(text, c, bold=False, bg=None):
-    if not RICH_AVAILABLE:
-        codes = {
-            'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32',
-            'red': '31', 'blue': '34', 'white': '37'
-        }
-        style = []
-        if bold: style.append('1')
-        if c in codes: style.append(codes[c])
-        if bg == 'black': style.append('40')
-        if not style: style = ['0']
-        return f"\033[{';'.join(style)}m{text}\033[0m"
-    tag = c
-    if bold: tag = f"bold {c}"
-    if bg: tag += f" on {bg}"
-    return f"[{tag}]{text}[/{tag}]"
+def status_badge(status):
+    return {
+        "success": "✅",
+        "warning": "⚠️",
+        "fail": "❌",
+        "skip": "⏭️",
+    }.get(status.lower(), "❓")
 
-def safe_read_file(filepath, max_lines=100, error_log=None):
-    """Read file content safely, limiting lines to avoid memory issues."""
-    if not os.path.isfile(filepath):
-        return None
-    try:
-        lines = []
-        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            for i, line in enumerate(f):
-                if i >= max_lines:
-                    lines.append("... (truncated, see full file for details)")
-                    break
-                lines.append(html.escape(line.strip()))
-        return lines
-    except Exception as e:
-        if error_log:
-            with open(error_log, 'a', encoding='utf-8') as ferr:
-                ferr.write(f"Failed to read {filepath}: {e}\n")
-        logger.error(f"Failed to read {filepath}: {e}")
-        return None
+def escape_html(text):
+    import html
+    return html.escape(str(text))
 
-def generate_report(domain, config, context):
-    """Generate an HTML report summarizing scan results."""
-    start_time = time.time()
-    output_dir = os.path.abspath(config.get('output_dir', 'output'))
-    intensity = config.get('intensity', 'medium')
-    domain_dir = os.path.join(output_dir, domain)
-    error_log = os.path.join(domain_dir, 'errors.log')
-    report_file = os.path.join(domain_dir, 'report.html')
+def iso_timestamp():
+    return datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
 
-    # Ensure output directory exists
-    try:
-        os.makedirs(domain_dir, exist_ok=True)
-    except OSError as e:
-        logger.error(f"Failed to create output directory {domain_dir}: {e}")
-        if console:
-            console.print(color(f"[VENO] Failed to create output directory: {e}", 'red', bold=True))
-        return
+# === HTML Snippets ===
 
-    # Collect summary data
-    summary = {
-        'subdomains': len(context.get('subdomains', [])),
-        'live_subdomains': len(context.get('live_subdomains', [])),
-        'wayback_urls': 0,
-        'sensitive_files': len(context.get('sensitive_files', [])),
-        'juicy_info': len(context.get('juicy', [])),
-        'vuln_urls': len(context.get('vuln_urls', [])),
-        'xss_files': len(context.get('xss', [])),
-        'dir_fuzz': len(context.get('dir_fuzz', [])),
-        'sqlmap_scans': len(context.get('sqlmap', [])),
-        'nuclei_findings': 0,
-        'failures': len(context.get('failures', []))
-    }
-
-    # Count wayback URLs
-    wayback_file = context.get('waybackurls', os.path.join(domain_dir, 'waybackurls.txt'))
-    if os.path.isfile(wayback_file):
-        try:
-            with open(wayback_file, 'r', encoding='utf-8', errors='ignore') as f:
-                summary['wayback_urls'] = sum(1 for _ in f)
-        except Exception as e:
-            logger.error(f"Failed to count lines in {wayback_file}: {e}")
-
-    # Count Nuclei findings
-    nuclei_file = context.get('nuclei_chained', os.path.join(domain_dir, 'nuclei_chained.txt'))
-    if os.path.isfile(nuclei_file):
-        try:
-            with open(nuclei_file, 'r', encoding='utf-8', errors='ignore') as f:
-                summary['nuclei_findings'] = sum(1 for _ in f)
-        except Exception as e:
-            logger.error(f"Failed to count lines in {nuclei_file}: {e}")
-
-    # Read file contents for detailed sections
-    files_to_read = {
-        'Subdomains': os.path.join(domain_dir, 'all_subdomains.txt'),
-        'Live Subdomains': os.path.join(domain_dir, 'live_subdomains.txt'),
-        'Wayback URLs': wayback_file,
-        'Sensitive Files': os.path.join(domain_dir, 'sensitive_files.txt'),
-        'Juicy Info': os.path.join(domain_dir, 'juicy_info.txt'),
-        'Vulnerable URLs': os.path.join(domain_dir, 'paramspider.txt'),
-        'Directory Fuzzing': os.path.join(domain_dir, 'dir_fuzz.txt'),
-        'Nuclei Findings': nuclei_file,
-    }
-    file_contents = {key: safe_read_file(path, max_lines=100, error_log=error_log) for key, path in files_to_read.items()}
-    
-    # XSS files
-    xss_contents = []
-    for xss_file in context.get('xss', []):
-        if os.path.isfile(xss_file):
-            content = safe_read_file(xss_file, max_lines=50, error_log=error_log)
-            xss_contents.append((os.path.basename(xss_file), content))
-
-    # SQLMap logs
-    sqlmap_logs = [(os.path.basename(log), os.listdir(log) if os.path.isdir(log) else []) for log in context.get('sqlmap', [])]
-
-    # Generate HTML report
-    html_content = f"""
+HEADER = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VENO Scan Report - {html.escape(domain)}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        function toggleSection(id) {{
-            const section = document.getElementById(id);
-            section.classList.toggle('hidden');
-        }}
-        function downloadReport() {{
-            const content = document.documentElement.outerHTML;
-            const blob = new Blob([content], {{ type: 'text/html' }});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'veno_report_{domain}.html';
-            a.click();
-            URL.revokeObjectURL(url);
-        }}
-    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>🔥 VENO Hacker Scan Report</title>
+    <style>
+        body {
+            background: #0d1117; 
+            color: #c9d1d9;
+            font-family: "Fira Code", monospace, monospace;
+            margin: 0; padding: 0; 
+        }
+        a, a:visited { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Sidebar nav */
+        #sidebar {
+            position: fixed; top: 0; left: 0;
+            width: 280px; height: 100vh;
+            background: rgba(20, 26, 33, 0.95);
+            border-right: 1px solid #21262d;
+            padding: 20px;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            z-index: 9999;
+        }
+        #sidebar.hide {
+            transform: translateX(-300px);
+        }
+        #sidebar h2 {
+            margin-top: 0;
+            font-weight: 700;
+            font-size: 1.4em;
+            letter-spacing: 1.5px;
+            color: #58a6ff;
+            margin-bottom: 1em;
+        }
+        #sidebar ul {
+            list-style: none;
+            padding-left: 0;
+            font-size: 0.9em;
+        }
+        #sidebar ul li {
+            margin-bottom: 0.8em;
+        }
+        #sidebar ul li a {
+            color: #8b949e;
+            cursor: pointer;
+        }
+        #sidebar ul li a:hover {
+            color: #58a6ff;
+        }
+
+        /* Main content */
+        #content {
+            margin-left: 300px;
+            padding: 20px;
+            max-width: 1200px;
+        }
+
+        /* Toggle button */
+        #toggleSidebarBtn {
+            position: fixed;
+            top: 10px; left: 10px;
+            background: #238636;
+            border: none;
+            color: #fff;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-size: 1em;
+            z-index: 10000;
+            border-radius: 4px;
+            box-shadow: 0 0 10px #238636aa;
+        }
+        #toggleSidebarBtn:hover {
+            background: #2ea043;
+        }
+
+        /* Section styling */
+        section {
+            margin-bottom: 3rem;
+            border-radius: 10px;
+            background: #161b22cc;
+            padding: 1.5rem;
+            box-shadow: 0 0 15px #23863666;
+        }
+
+        h1, h2, h3 {
+            color: #58a6ff;
+            text-shadow: 0 0 8px #58a6ff88;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.2rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Collapsible */
+        details {
+            background: #0d1117;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            box-shadow: inset 0 0 10px #23863633;
+            padding: 0.75rem 1rem;
+        }
+        details[open] {
+            box-shadow: 0 0 20px #238636bb;
+        }
+        summary {
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+            color: #58a6ff;
+        }
+
+        /* Tables */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            color: #c9d1d9;
+        }
+        th, td {
+            border: 1px solid #30363d;
+            padding: 8px;
+            text-align: left;
+            font-family: "Fira Code", monospace, monospace;
+        }
+        th {
+            background-color: #21262d;
+        }
+        tr:nth-child(even) {
+            background-color: #161b22;
+        }
+
+        /* Status badge */
+        .badge {
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            display: inline-block;
+            min-width: 30px;
+            text-align: center;
+            user-select: none;
+        }
+        .badge-success { background-color: #238636; color: #d2f8d2; }
+        .badge-warning { background-color: #e3b341; color: #392f00; }
+        .badge-fail { background-color: #cf222e; color: #f8d7d7; }
+        .badge-skip { background-color: #6a737d; color: #e1e4e8; }
+
+        /* JSON viewer */
+        #jsonviewer {
+            background: #010409;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            overflow: auto;
+            max-height: 400px;
+            padding: 1rem;
+            box-shadow: 0 0 20px #238636aa inset;
+            white-space: pre-wrap;
+        }
+
+        /* Chart container */
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin: 1rem 0;
+        }
+
+        /* Fuzz path highlight */
+        .fuzz-path {
+            font-family: monospace;
+            background: #23863622;
+            border-radius: 5px;
+            padding: 0.2em 0.5em;
+            user-select: text;
+        }
+
+        /* Glow icon */
+        .icon-glow {
+            filter: drop-shadow(0 0 6px #58a6ffaa);
+            vertical-align: middle;
+        }
+    </style>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans">
-    <nav class="bg-blue-600 p-4 shadow-md">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-white">VENO Scan Report</h1>
-            <button onclick="downloadReport()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
-                Download Report
-            </button>
-        </div>
+<body>
+    <button id="toggleSidebarBtn">☰ Menu</button>
+    <nav id="sidebar" class="">
+        <h2>🔥 VENO Report</h2>
+        <ul id="navList">
+            <!-- dynamically populated -->
+        </ul>
     </nav>
-    <div class="container mx-auto p-6">
-        <h2 class="text-3xl font-bold mb-4">Scan Report for {html.escape(domain)}</h2>
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2">Scan Metadata</h3>
-            <p><strong>Domain:</strong> {html.escape(domain)}</p>
-            <p><strong>Intensity:</strong> {html.escape(intensity)}</p>
-            <p><strong>Output Directory:</strong> {html.escape(output_dir)}</p>
-            <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <p><strong>VENO Version:</strong> 1.0</p>
-        </div>
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2">Summary</h3>
-            <table class="w-full table-auto border-collapse">
-                <thead>
-                    <tr class="bg-gray-200 dark:bg-gray-700">
-                        <th class="border px-4 py-2">Category</th>
-                        <th class="border px-4 py-2">Count</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td>Subdomains</td><td>{summary['subdomains']}</td></tr>
-                    <tr><td>Live Subdomains</td><td>{summary['live_subdomains']}</td></tr>
-                    <tr><td>Wayback URLs</td><td>{summary['wayback_urls']}</td></tr>
-                    <tr><td>Sensitive Files</td><td>{summary['sensitive_files']}</td></tr>
-                    <tr><td>Juicy Info</td><td>{summary['juicy_info']}</td></tr>
-                    <tr><td>Vulnerable URLs</td><td>{summary['vuln_urls']}</td></tr>
-                    <tr><td>XSS Scan Files</td><td>{summary['xss_files']}</td></tr>
-                    <tr><td>Directory Fuzzing</td><td>{summary['dir_fuzz']}</td></tr>
-                    <tr><td>SQLMap Scans</td><td>{summary['sqlmap_scans']}</td></tr>
-                    <tr><td>Nuclei Findings</td><td>{summary['nuclei_findings']}</td></tr>
-                    <tr><td>Failed Steps</td><td>{summary['failures']}</td></tr>
-                </tbody>
-            </table>
-        </div>
-    """
+    <main id="content">
+'''
 
-    # Add detailed sections
-    for section, content in file_contents.items():
-        html_content += f"""
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2 cursor-pointer" onclick="toggleSection('{section.lower().replace(' ', '_')}')">
-                {section} ({summary.get(section.lower().replace(' ', '_'), 0)})
-            </h3>
-            <div id="{section.lower().replace(' ', '_')}" class="hidden">
-                {'<pre class="bg-gray-100 dark:bg-gray-700 p-4 rounded">' + '<br>'.join(content) + '</pre>' if content else '<p>No data available.</p>'}
-            </div>
-        </div>
-        """
+FOOTER = '''
+    </main>
 
-    # XSS section
-    html_content += """
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2 cursor-pointer" onclick="toggleSection('xss')">XSS Scans ({})</h3>
-            <div id="xss" class="hidden">
-    """.format(summary['xss_files'])
-    for filename, content in xss_contents:
-        html_content += f"""
-                <h4 class="font-medium mb-1">{html.escape(filename)}</h4>
-                {'<pre class="bg-gray-100 dark:bg-gray-700 p-4 rounded">' + '<br>'.join(content) + '</pre>' if content else '<p>No data available.</p>'}
-        """
-    html_content += """
-            </div>
-        </div>
-    """
+    <script>
+        // Sidebar toggle
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('toggleSidebarBtn');
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('hide');
+        });
 
-    # SQLMap section
-    html_content += """
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2 cursor-pointer" onclick="toggleSection('sqlmap')">SQLMap Scans ({})</h3>
-            <div id="sqlmap" class="hidden">
-    """.format(summary['sqlmap_scans'])
-    for log_dir, files in sqlmap_logs:
-        html_content += f"""
-                <h4 class="font-medium mb-1">{html.escape(log_dir)}</h4>
-                {'<ul class="list-disc pl-5">' + ''.join(f'<li>{html.escape(f)}</li>' for f in files) + '</ul>' if files else '<p>No files generated.</p>'}
-        """
-    html_content += """
-            </div>
-        </div>
-    """
+        // Smooth scroll for nav links
+        document.querySelectorAll('#navList a').forEach(anchor => {
+            anchor.addEventListener('click', e => {
+                e.preventDefault();
+                const target = document.querySelector(anchor.getAttribute('href'));
+                if(target) target.scrollIntoView({behavior: 'smooth'});
+            });
+        });
 
-    # Failures section
-    if context.get('failures'):
-        html_content += """
-        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-6">
-            <h3 class="text-xl font-semibold mb-2 cursor-pointer text-red-600" onclick="toggleSection('failures')">Failed Steps ({})</h3>
-            <div id="failures" class="hidden">
-                <ul class="list-disc pl-5">
-        """.format(summary['failures'])
-        for step, error in context.get('failures', []):
-            html_content += f"<li>{html.escape(step)}: {html.escape(error)}</li>"
-        html_content += """
-                </ul>
-            </div>
-        </div>
-        """
-
-    # Close HTML
-    html_content += """
-    </div>
+        // Auto collapse empty details
+        document.querySelectorAll('details').forEach(d => {
+            if(d.textContent.trim() === '' || d.querySelectorAll('*').length === 0) {
+                d.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
+'''
+
+# === Main reporter class ===
+
+class Reporter:
+    def __init__(self, output_path, report_data):
+        """
+        output_path: str path to write the report HTML
+        report_data: dict parsed scan data context
+        """
+        self.output_path = output_path
+        self.data = report_data
+
+        # Section order and titles for sidebar nav
+        self.sections = [
+            ("summary", "Summary"),
+            ("vulnerabilities", "Vulnerabilities"),
+            ("sqlmap", "SQLMap Injections"),
+            ("fuzzing", "Fuzzing Results"),
+            ("sensitive", "Sensitive Data Found"),
+            ("graphs", "Graphs & Analytics"),
+            ("raw_json", "Raw JSON Data"),
+            ("tool_status", "Tool Status"),
+        ]
+
+    def generate_report(self):
+        html = HEADER
+        html += f'<h1>🔥 VENO Hacker Scan Report</h1>\n'
+        html += f'<p>Generated at: {iso_timestamp()}</p>\n'
+        
+        # Sidebar nav placeholders, will inject later
+        nav_links = []
+
+        # Content container to fill sections
+        content_html = ''
+
+        # Iterate sections to generate content
+        for sec_id, sec_title in self.sections:
+            section_html = self._render_section(sec_id, sec_title)
+            if section_html:
+                content_html += f'<section id="{sec_id}">\n<h2>{sec_title}</h2>\n{section_html}\n</section>\n'
+                nav_links.append(f'<li><a href="#{sec_id}">{sec_title}</a></li>')
+
+        # Insert nav links dynamically
+        nav_html = '\n'.join(nav_links)
+        html = html.replace('<ul id="navList">\n    <!-- dynamically populated -->\n  </ul>', f'<ul id="navList">\n{nav_html}\n</ul>')
+
+        html += content_html
+        html += FOOTER
+
+        with open(self.output_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        print(f'[VENO REPORT] Report generated at: {self.output_path}')
+
+    # Section renderers
+    def _render_section(self, sec_id, sec_title):
+        if sec_id == "summary":
+            return self._render_summary()
+        elif sec_id == "vulnerabilities":
+            return self._render_vulnerabilities()
+        elif sec_id == "sqlmap":
+            return self._render_sqlmap()
+        elif sec_id == "fuzzing":
+            return self._render_fuzzing()
+        elif sec_id == "sensitive":
+            return self._render_sensitive()
+        elif sec_id == "graphs":
+            return self._render_graphs()
+        elif sec_id == "raw_json":
+            return self._render_raw_json()
+        elif sec_id == "tool_status":
+            return self._render_tool_status()
+        else:
+            return ''
+
+    def _render_summary(self):
+        d = self.data.get('summary', {})
+        if not d:
+            return '<p>No summary data found.</p>'
+        
+        html = f'''
+            <p><strong>Domain:</strong> {escape_html(d.get("domain", "N/A"))}</p>
+            <p><strong>Scan started:</strong> {escape_html(d.get("start_time", "N/A"))}</p>
+            <p><strong>Scan finished:</strong> {escape_html(d.get("end_time", "N/A"))}</p>
+            <p><strong>Scan duration:</strong> {escape_html(d.get("duration", "N/A"))}</p>
+            <p><strong>Total vulnerabilities found:</strong> {escape_html(d.get("vuln_count", 0))}</p>
+            <p><strong>Total sensitive data matches:</strong> {escape_html(d.get("sensitive_count", 0))}</p>
+        '''
+        return html
+
+    def _render_vulnerabilities(self):
+        vulns = self.data.get('vulnerabilities', [])
+        if not vulns:
+            return '<p>No vulnerabilities detected.</p>'
+
+        # Group by severity for easy scan
+        severity_groups = defaultdict(list)
+        for v in vulns:
+            sev = v.get('severity', 'unknown').lower()
+            severity_groups[sev].append(v)
+
+        html = ''
+        for sev in ['critical', 'high', 'medium', 'low', 'unknown']:
+            group = severity_groups.get(sev, [])
+            if not group:
+                continue
+            badge = status_badge('fail' if sev in ['critical', 'high'] else 'warning' if sev == 'medium' else 'success')
+            html += f'<h3>{sev.capitalize()} Vulnerabilities {badge}</h3>'
+            for v in group:
+                name = escape_html(v.get('name', 'Unnamed Vuln'))
+                desc = escape_html(v.get('description', ''))
+                url = escape_html(v.get('url', ''))
+                param = escape_html(v.get('param', ''))
+                evidence = escape_html(v.get('evidence', ''))
+                html += f'''
+                    <details>
+                        <summary>{name} — Target: {url} — Param: {param}</summary>
+                        <p><em>{desc}</em></p>
+                        <p><strong>Evidence:</strong> {evidence}</p>
+                    </details>
+                '''
+        return html
+
+    def _render_sqlmap(self):
+        sqlmap = self.data.get('sqlmap', {})
+        if not sqlmap or not sqlmap.get('injections'):
+            return '<p>No SQLMap injection data found.</p>'
+        
+        injections = sqlmap['injections']
+        html = ''
+        for inj in injections:
+            url = escape_html(inj.get('url', 'N/A'))
+            param = escape_html(inj.get('parameter', 'N/A'))
+            techniques = inj.get('techniques', [])
+            status = inj.get('status', 'unknown')
+            badge = status_badge(status)
+            html += f'<details><summary>Injection on {url} — Param: {param} {badge}</summary>'
+            html += '<ul>'
+            for tech in techniques:
+                tech_name = escape_html(tech.get('name', 'unknown'))
+                tech_success = tech.get('success', False)
+                tech_status = 'success' if tech_success else 'fail'
+                tech_badge = status_badge(tech_status)
+                html += f'<li>{tech_name} {tech_badge}</li>'
+            html += '</ul></details>'
+        return html
+
+    def _render_fuzzing(self):
+        fuzz = self.data.get('fuzzing', [])
+        if not fuzz:
+            return '<p>No fuzzing results found.</p>'
+        
+        # Sort by status (success > warning > fail) and path alphabetically
+        status_rank = {'success': 0, 'warning': 1, 'fail': 2, 'skip': 3, 'unknown': 4}
+        sorted_fuzz = sorted(fuzz, key=lambda x: (status_rank.get(x.get('status', 'unknown').lower(), 99), x.get('path', '')))
+
+        html = '<table><thead><tr><th>Path</th><th>Status</th><th>Response Code</th><th>Length</th><th>Notes</th></tr></thead><tbody>'
+        for entry in sorted_fuzz:
+            path = escape_html(entry.get('path', ''))
+            status = entry.get('status', 'unknown').lower()
+            badge_class = f'badge-{status}' if status in ['success', 'warning', 'fail', 'skip'] else ''
+            badge = status_badge(status)
+            code = escape_html(entry.get('response_code', ''))
+            length = escape_html(entry.get('response_length', ''))
+            notes = escape_html(entry.get('notes', ''))
+            html += f'<tr><td class="fuzz-path">{path}</td><td class="badge {badge_class}">{badge} {status.capitalize()}</td><td>{code}</td><td>{length}</td><td>{notes}</td></tr>'
+        html += '</tbody></table>'
+        return html
+
+    def _render_sensitive(self):
+        sensitive = self.data.get('sensitive', [])
+        if not sensitive:
+            return '<p>No sensitive data found.</p>'
+        
+        html = '<table><thead><tr><th>Type</th><th>Match</th><th>Location</th></tr></thead><tbody>'
+        for item in sensitive:
+            typ = escape_html(item.get('type', ''))
+            match = escape_html(item.get('match', ''))
+            loc = escape_html(item.get('location', ''))
+            html += f'<tr><td>{typ}</td><td>{match}</td><td>{loc}</td></tr>'
+        html += '</tbody></table>'
+        return html
+
+    def _render_graphs(self):
+        # Prepare JS data
+        vulns = self.data.get('vulnerabilities', [])
+        vuln_counts = defaultdict(int)
+        for v in vulns:
+            sev = v.get('severity', 'unknown').capitalize()
+            vuln_counts[sev] += 1
+
+        fuzz = self.data.get('fuzzing', [])
+        fuzz_status_counts = defaultdict(int)
+        for f in fuzz:
+            status = f.get('status', 'unknown').capitalize()
+            fuzz_status_counts[status] += 1
+
+        sensitive = self.data.get('sensitive', [])
+        sensitive_types = defaultdict(int)
+        for s in sensitive:
+            t = s.get('type', 'Unknown')
+            sensitive_types[t] += 1
+
+        # Chart.js scripts and canvases
+        html = '''
+            <div class="chart-container">
+                <canvas id="vulnSeverityChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="fuzzStatusChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="sensitiveTypesChart"></canvas>
+            </div>
+
+            <script>
+                const vulnSeverityCtx = document.getElementById('vulnSeverityChart').getContext('2d');
+                const vulnSeverityChart = new Chart(vulnSeverityCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: {vuln_labels},
+                        datasets: [{
+                            label: 'Vulnerabilities by Severity',
+                            data: {vuln_data},
+                            backgroundColor: ['#cf222e', '#f85149', '#d29922', '#238636', '#8b949e'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#c9d1d9',
+                                    font: { size: 14, family: 'Fira Code, monospace' }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                const fuzzStatusCtx = document.getElementById('fuzzStatusChart').getContext('2d');
+                const fuzzStatusChart = new Chart(fuzzStatusCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: {fuzz_labels},
+                        datasets: [{
+                            label: 'Fuzzing Status',
+                            data: {fuzz_data},
+                            backgroundColor: ['#238636', '#e3b341', '#cf222e', '#6a737d', '#8b949e']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#c9d1d9' }
+                            },
+                            x: {
+                                ticks: { color: '#c9d1d9' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: { color: '#c9d1d9' }
+                            }
+                        }
+                    }
+                });
+
+                const sensitiveTypesCtx = document.getElementById('sensitiveTypesChart').getContext('2d');
+                const sensitiveTypesChart = new Chart(sensitiveTypesCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: {sens_labels},
+                        datasets: [{
+                            label: 'Sensitive Data Types',
+                            data: {sens_data},
+                            backgroundColor: [
+                                '#238636', '#cf222e', '#f85149', '#d29922', '#6a737d',
+                                '#58a6ff', '#b392f0', '#2ea043', '#d16ba5'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#c9d1d9' }
+                            }
+                        }
+                    }
+                });
+            </script>
+        '''.format(
+            vuln_labels=json.dumps(list(vuln_counts.keys())),
+            vuln_data=json.dumps(list(vuln_counts.values())),
+            fuzz_labels=json.dumps(list(fuzz_status_counts.keys())),
+            fuzz_data=json.dumps(list(fuzz_status_counts.values())),
+            sens_labels=json.dumps(list(sensitive_types.keys())),
+            sens_data=json.dumps(list(sensitive_types.values()))
+        )
+        return html
+
+    def _render_raw_json(self):
+        json_data = json.dumps(self.data, indent=2)
+        html = f'''
+            <div id="jsonviewer">{escape_html(json_data)}</div>
+        '''
+        return html
+
+    def _render_tool_status(self):
+        tools = self.data.get('tool_status', {})
+        if not tools:
+            return '<p>No tool status data found.</p>'
+        
+        html = '<table><thead><tr><th>Tool</th><th>Status</th><th>Version</th><th>Notes</th></tr></thead><tbody>'
+        for tool, info in tools.items():
+            status = info.get('status', 'unknown').lower()
+            badge_class = f'badge-{status}' if status in ['success', 'warning', 'fail', 'skip'] else ''
+            badge = status_badge(status)
+            version = escape_html(info.get('version', 'N/A'))
+            notes = escape_html(info.get('notes', ''))
+            html += f'<tr><td>{escape_html(tool)}</td><td class="badge {badge_class}">{badge} {status.capitalize()}</td><td>{version}</td><td>{notes}</td></tr>'
+        html += '</tbody></table>'
+        return html
+
+# === Top-level wrapper for scanner_steps.py compatibility ===
+def generate_report(output_path, report_data):
     """
+    Wrapper function to expose Reporter.generate_report for module-level import.
+    
+    Args:
+        output_path (str): Path to write the report HTML
+        report_data (dict): Parsed scan data context
+    """
+    reporter = Reporter(output_path, report_data)
+    reporter.generate_report()
 
-    # Save report
-    try:
-        with open(report_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        if console:
-            console.print(color(f"[VENO] Report generated: {report_file}", 'green', bold=True))
-        logger.info(f"Report generated: {report_file}")
-    except Exception as e:
-        if console:
-            console.print(color(f"[VENO] Failed to save report: {e}", 'red', bold=True))
-        with open(error_log, 'a', encoding='utf-8') as ferr:
-            ferr.write(f"Failed to save report: {e}\n")
-        logger.error(f"Failed to save report: {e}")
-
-    elapsed = int(time.time() - start_time)
-    logger.info(f"Report generation completed in {elapsed}s")
+# === Usage example ===
+# Assuming you have scan data in a dict `scan_data` and want to save to output.html:
+#
+# from modules.reporter import generate_report
+# generate_report("output.html", scan_data)
