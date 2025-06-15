@@ -1,89 +1,99 @@
 import sys
 import logging
-import subprocess
 import os
 import json
 import time
 import re
+import traceback
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 try:
     from rich.console import Console
     from rich.prompt import Prompt
     RICH_AVAILABLE = True
     console = Console()
-except ImportError:
+except ImportError as exc:
     RICH_AVAILABLE = False
     console = None
+    logger.warning(f"Failed to import rich: {exc}")
 
 try:
     from modules.banner import banner
-except Exception as e:
-    banner = lambda: f"[!] Failed to load banner module: {e}"
+except ImportError as exc:
+    banner = lambda: "VENO Automated Recon Shell"
+    logger.warning(f"Failed to import banner: {exc}")
 
 try:
     from modules.scanner import run_scanner
-except Exception as e:
-    def run_scanner(domain, config, context=None):
-        err = f"[!] Scanner module not available: {e}"
-        if console:
-            console.print(f"[bold red on black]{err}[/bold red on black]")
-        else:
-            print(f"\033[1;31m{err}\033[0m")
+except ImportError as exc:
+    logger.error(f"Scanner module not available: {exc}")
+    raise ImportError(f"[!] Scanner module not available: {exc}")
 
 try:
     from modules.scan_intensity import SCAN_INTENSITIES
-except Exception as e:
+except ImportError as exc:
     SCAN_INTENSITIES = {}
-    print(f"[!] scan_intensity module error: {e}")
+    logger.warning(f"Failed to import scan_intensity: {exc}")
 
 try:
     from modules.dependencies import check_dependencies
-except Exception as e:
-    def check_dependencies():
-        err = f"[!] dependencies module not available: {e}"
-        if console:
-            console.print(f"[bold red on black]{err}[/bold red on black]")
-        else:
-            print(f"\033[1;31m{err}\033[0m")
+except ImportError as exc:
+    def check_dependencies(config=None):
+        logger.warning("Dependencies module unavailable")
+    logger.warning(f"Failed to import dependencies: {exc}")
 
 try:
     from modules.memes import get_ascii_meme, get_insult
     HAS_MEMES = True
-except ImportError:
+except ImportError as exc:
     HAS_MEMES = False
     get_ascii_meme = lambda: "¯\\_(ツ)_/¯"
-    get_insult = lambda: "No memes for you!"
+    get_insult = lambda: ""
+    logger.warning(f"Failed to import memes: {exc}")
 
 def color(text, c, bold=False, bg=None):
     if not RICH_AVAILABLE:
         codes = {
-            'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32', 'red': '31', 'blue': '34', 'white': '37'
+            'cyan': '36', 'magenta': '35', 'yellow': '33', 'green': '32',
+            'red': '31', 'blue': '34', 'white': '37'
         }
         style = []
-        if bold: style.append('1')
-        if c in codes: style.append(codes[c])
-        if bg == 'black': style.append('40')
-        if not style: style.append('0')
+        if bold:
+            style.append('1')
+        if c in codes:
+            style.append(codes[c])
+        if bg == 'black':
+            style.append('40')
+        if not style:
+            style.append('0')
         return f"\033[{';'.join(style)}m{text}\033[0m"
     tag = c
-    if bold: tag = f"bold {c}"
-    if bg: tag += f" on {bg}"
+    if bold and c:
+        tag = f"bold {c}"
+    if bg:
+        tag += f" on {bg}"
     return f"[{tag}]{text}[/{tag}]"
 
 def print_banner():
     try:
         val = banner() if callable(banner) else banner
-        val = str(val or '').strip()
+        val = str(val).strip()
         if val:
             if console:
                 console.print(color(val, "green", bold=True))
             else:
                 print(color(val, "green", bold=True))
-    except Exception as e:
-        print(f"[!] Failed to print banner: {e}")
+    except Exception as exc:
+        logger.error(f"Failed to print banner: {exc}\n{traceback.format_exc()}")
+        if console:
+            console.print(color("[VENO] Automated Recon Shell", "cyan", bold=True))
+        else:
+            print(color("[VENO] Automated Recon Shell", "cyan", bold=True))
 
 def print_usage():
-    msg = color("[VENO]", "cyan", bold=True) + color(" Usage: set options, show options, run, help, clear, exit", "white")
+    msg = color("[VENO]", "cyan", bold=True) + color(" Usage: set <option> <value>, show options, run, help, clear, exit", "white")
     tail = color("Type 'help' for full command details.\n", "green", bold=True)
     if console:
         console.print(msg)
@@ -96,86 +106,102 @@ def print_help():
     help_text = f"""
 {color('VENO Automated Recon Shell - Full Help', 'magenta', bold=True)}
 
-  {color('show options', 'cyan')}      - Prints all current settings and scan parameters.
-  {color('set <option> <value>', 'cyan')} - Set a scan option. Options:
-    - {color('domain', 'yellow', bold=True)}     - Target domain to scan (e.g., set domain example.com)
-    - {color('output_dir', 'yellow', bold=True)} - Output directory for results (default: output)
-    - {color('threads', 'yellow', bold=True)}    - Number of threads/tools to use (default: 10)
-    - {color('wordlist', 'yellow', bold=True)}   - Custom wordlist path for fuzzing/discovery
-    - {color('subscan', 'yellow', bold=True)}   - true/false to enable/disable subdomain scan
-    - {color('intensity', 'yellow', bold=True)} - Scan profile: light, medium, heavy (default: medium)
-      Example: set domain example.com
-      Example: set intensity medium
+{color('show options', 'cyan')}      - Prints all current settings.
+{color('set <option> <value>', 'cyan')} - Set scan options:
+  - {color('domain', 'yellow', bold=True)}     - Target domain (e.g., example.com)
+  - {color('output_dir', 'yellow')} - Output directory (default: 'output')
+  - {color('threads', 'yellow')}    - Threads (1-1000, default: 50)
+  - {color('wordlist', 'yellow')}   - Custom wordlist path
+  - {color('subscan', 'yellow')}    - true/false for subdomains (default: true/false)
+  - {color('intensity', 'yellow')}  - Scan profile: light, medium, heavy (default: medium)
+  - {color('dir_fuzz_tool', 'yellow')} - Fuzz tool: ffuf, dirsearch (default: ffuf)
 
-  {color('run', 'cyan')}              - Launches the scan with the current config.
-  {color('save config <filename>', 'cyan')} - Saves current config to a file.
-  {color('timer', 'cyan')}            - Show session elapsed time.
-  {color('clear', 'cyan')}            - Clears the screen.
-  {color('meme', 'cyan')}             - Display a random ASCII meme.
-  {color('insult', 'cyan')}           - Display a random insult.
-  {color('help', 'cyan')}             - Show this help message.
-  {color('exit', 'cyan')} or {color('quit', 'cyan')} - Exit the shell.
+    Example: set domain example.com
+    Example: set intensity heavy
 
-  {color('Scan Intensities:', 'magenta', bold=True)}:
+{color('run', 'cyan')}              - Launches scan with current config.
+{color('save config <filename>', 'cyan')} - Saves config to file.
+{color('timer', 'cyan')}            - Shows session elapsed time.
+{color('clear', 'cyan')}            - Clears screen.
+{color('help', 'cyan')}             - Shows this help.
+{color('exit', 'cyan')} or {color('quit', 'cyan')} - Exits shell.
+
+{color('Available dir_fuzz_tool Options:', 'magenta', bold=True)}:
+  - ffuf: Fast fuzzing tool (default)
+  - dirsearch: Comprehensive directory enumeration
+
+{color('Scan Intensities:', 'magenta', bold=True)}:
 """
+
     for key, profile in SCAN_INTENSITIES.items():
         features = []
-        if profile.get("run_nuclei_full"): features.append("extended nuclei")
-        if profile.get("dalfox"): features.append("xss")
-        if profile.get("xsstrike"): features.append("xsstrike")
-        if profile.get("run_sqlmap"): features.append("sqlmap")
+        if profile.get("run_nuclei_full"):
+            features.append("extended nuclei")
+        if profile.get("dalfox"):
+            features.append("xss")
+        if profile.get("xsstrike"):
+            features.append("xsstrike")
+        if profile.get("run_sqlmap"):
+            features.append("sqlmap")
         features_str = " | ".join(features)
-        help_text += (
-            f"    {color(key, 'yellow', bold=True)}: "
-            f"wordlist={os.path.basename(profile['wordlist']) if 'wordlist' in profile else 'N/A'}, "
-            f"threads={profile['threads'] if 'threads' in profile else 'N/A'}"
-            + (f", {features_str}" if features_str else "") + "\n"
-        )
+
+        help_text += f"  {color(key, 'yellow', bold=True)}: wordlist={os.path.basename(profile.get('wordlist', 'N/A'))}, "
+        help_text += f"threads={profile.get('threads', 'N/A')}"
+        if features_str:
+            help_text += f", {features_str}"
+        help_text += "\n"
+
     help_text += f"""
-  {color('Example Usage:', 'magenta', bold=True)}:
-      set domain example.com
-      set intensity medium
-      set threads 20
-      run
+{color('Example Usage:', 'magenta', bold=True)}:
+  set domain example.com
+  set intensity medium
+  set threads 20
+  set dir_fuzz_tool ffuf
+  run
 """
+
     if console:
-        console.print(help_text)
+        console.print(color(help_text, "cyan"))
     else:
-        print(help_text)
+        print(color(help_text, "cyan"))
 
 def show_options(config):
-    core_keys = ['domain', 'output_dir', 'threads', 'wordlist', 'subscan', 'intensity']
-    msg = color("\nCurrent VENO options:", "green", bold=True)
+    core_keys = ['domain', 'output_dir', 'threads', 'subscan', 'intensity', 'dir_fuzz_tool']
+    msg = color("\nCurrent VENO Config:", "green", bold=True)
     if console:
         console.print(msg)
         for k in core_keys:
-            v = config.get(k, 'N/A')
-            console.print(color(f"  {k}: {v}", "cyan"))
+            console.print(color(f"  {k}: {config.get(k, 'N/A')}", "cyan"))
         console.print("")
     else:
         print(msg)
         for k in core_keys:
-            v = config.get(k, 'N/A')
-            print(color(f"  {k}: {v}", "cyan"))
+            print(color(f"  {k}: {config.get(k, 'N/A')}", "cyan"))
         print("")
 
 def merge_intensity(config, intensity):
     if intensity not in SCAN_INTENSITIES:
-        msg = color(f"Unknown intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES)}", "red", bold=True, bg="black")
-        if console: console.print(msg)
-        else: print(msg)
+        msg = color(f"Invalid intensity: {intensity}. Available: {', '.join(SCAN_INTENSITIES.keys())}", "red", bold=True)
+        if console:
+            console.print(msg)
+        else:
+            print(msg)
         return
     profile = SCAN_INTENSITIES[intensity]
     config["intensity"] = intensity
-    for key in profile:
-        config[key] = profile[key]
+    for key, value in profile.items():
+        config[key] = value
 
 def ensure_output_dirs(config):
     domain = config.get("domain")
     output_dir = config.get("output_dir", "output")
     if domain:
         path = os.path.join(output_dir, domain)
-        os.makedirs(path, exist_ok=True)
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError as exc:
+            logger.error(f"Failed to create output directory {path}: {exc}")
+            raise ValueError(f"Cannot create output directory: {path}")
 
 def safe_path(path):
     return os.path.abspath(os.path.expanduser(path))
@@ -183,13 +209,16 @@ def safe_path(path):
 def save_config(config, filename):
     try:
         filename = safe_path(filename)
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         if os.path.exists(filename):
-            confirm = input(color(f"[VENO] {filename} exists. Overwrite? (y/N): ", "red", bold=True))
-            if confirm.strip().lower() not in ("y", "yes"):
+            confirm = input(
+                color(f"[VENO] {filename} exists. Overwrite? (y/N): ", "yellow", bold=True)
+            )
+            if confirm.strip().lower() not in ["y", "yes"]:
                 if console:
-                    console.print(color("[VENO] Save cancelled.", "yellow", bold=True))
+                    console.print(color("[VENO] Save cancelled", "yellow", bold=True))
                 else:
-                    print(color("[VENO] Save cancelled.", "yellow", bold=True))
+                    print(color("[VENO] Save cancelled", "yellow", bold=True))
                 return
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
@@ -197,30 +226,33 @@ def save_config(config, filename):
             console.print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
         else:
             print(color(f"[VENO] Config saved to {filename}", "green", bold=True))
-    except Exception as e:
+    except OSError as exc:
+        error_msg = f"Failed to save config: {str(exc)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
         if console:
-            console.print(color(f"[VENO] Failed to save config: {e}", "red", bold=True, bg="black"))
+            console.print(color(f"[VENO] {error_msg}", "red", bold=True))
         else:
-            print(color(f"[VENO] Failed to save config: {e}", "red", bold=True, bg="black"))
+            print(color(f"[VENO] {error_msg}", "red", bold=True))
 
 def validate_domain(domain):
     pat = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$")
     return bool(pat.match(domain))
 
-def validate_threads(threads):
+def validate_threads(value):
     try:
-        n = int(threads)
-        return 1 <= n <= 1000
-    except Exception:
+        n = int(value)
+        return bool(1 <= n <= 1000)
+    except ValueError:
         return False
 
-COMMAND_LOG = []
+def validate_dir_fuzz_tool(value):
+    return value in ["ffuf", "dirsearch"]
 
 def main():
     session_start = time.time()
     try:
         check_dependencies()
-        msg = color("🔥 [VENO] ALL DEPENDENCIES SATISFIED! 🔥", "green", bold=True, bg="black")
+        msg = color("[VENO] All dependencies satisfied! ✅", "green", bold=True)
         border = color("─" * 65, "magenta", bold=True)
         if console:
             console.print(border)
@@ -230,15 +262,21 @@ def main():
             print(border)
             print(msg)
             print(border)
-    except Exception as e:
-        err = color(f"[VENO] Dependency check failed: {e}", "red", bold=True, bg="black")
+    except Exception as exc:
+        err = f"Dependency check failed: {exc}\n{traceback.format_exc()}"
+        logger.error(err)
         if console:
-            console.print(err)
+            console.print(color(f"[VENO] {err}", "red", bold=True))
         else:
-            print(err)
-        sys.exit(3)
+            print(color(f"[VENO] {err}", "red", bold=True))
+        sys.exit(2)
 
     print_banner()
+    if HAS_MEMES:
+        if console:
+            console.print(get_insult())
+        else:
+            print(get_insult())
     print_usage()
 
     default_intensity = "medium"
@@ -247,14 +285,18 @@ def main():
         "output_dir": "output",
         "subscan": True,
         "intensity": default_intensity,
+        "dir_fuzz_tool": "ffuf",
+        "threads": 20,
+        "wordlist": "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt"
     }
 
     if default_intensity in SCAN_INTENSITIES:
         merge_intensity(config, default_intensity)
 
+
     while True:
         try:
-            prompt_str = color("veno", "magenta", bold=True) + color(" > ", "green", bold=True)
+            prompt_str = color("[VENO", "magenta", bold=True) + color("] > ", "green", bold=True)
             if console:
                 cmd = Prompt.ask(prompt_str)
             else:
@@ -270,9 +312,8 @@ def main():
 
         if not cmd:
             continue
-        COMMAND_LOG.append(cmd)
 
-        try:  # Top-level try-except to catch all command-related exceptions
+        try:
             if cmd in ("exit", "quit"):
                 bye_msg = color("Bye.", "magenta", bold=True)
                 if console:
@@ -283,152 +324,133 @@ def main():
 
             elif cmd == "help":
                 print_help()
+
             elif cmd in ("show options", "options"):
                 show_options(config)
+
             elif cmd == "clear":
-                os.system('cls' if os.name == 'nt' else 'clear')
+                os.system('cls' if os.name == 'nt' else "clear")
                 print_banner()
                 print_usage()
-                continue
-            elif cmd.startswith("save config "):
-                _, _, filename = cmd.partition("save config ")
+
+            elif cmd.startswith("save config"):
+                _, _, filename = cmd.partition("save config")
                 filename = filename.strip()
                 if filename:
                     save_config(config, filename)
                 else:
-                    err = color("[VENO] Usage: save config <filename>", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
+                    err = color("[VENO] Usage: save config <filename>", "red", bold=True)
+                    console.print(err) if console else print(err)
+
             elif cmd == "timer":
                 elapsed = time.time() - session_start
                 mins, secs = divmod(int(elapsed), 60)
-                msg = color(f"[VENO] Session time: {mins} min {secs} sec", "yellow", bold=True)
-                if console:
-                    console.print(msg)
-                else:
-                    print(msg)
+                msg = color(f"[VENO] Session time: {mins}m {secs}s", "yellow", bold=True)
+                console.print(msg) if console else print(msg)
+
             elif cmd.startswith("set "):
                 parts = cmd.split(maxsplit=2)
                 if len(parts) < 3:
-                    err = color("Usage: set <option> <value>", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
+                    err = color("[VENO] Usage: set <option> <value>", "red", bold=True)
+                    console.print(err) if console else print(err)
                     continue
-                option = parts[1]
-                value = parts[2]
+
+                option, value = parts[1], parts[2]
+
                 if option == "threads":
                     if not validate_threads(value):
-                        err = color("[VENO] threads must be an integer between 1 and 1000", "red", bold=True, bg="black")
-                        if console:
-                            console.print(err)
-                        else:
-                            print(err)
+                        err = color("[VENO] Threads must be 1-1000", "red", bold=True)
+                        console.print(err) if console else print(err)
                         continue
                     config["threads"] = int(value)
+
                 elif option == "output_dir":
                     config["output_dir"] = safe_path(value)
+
                 elif option == "wordlist":
                     if not os.path.isfile(value):
-                        err = color(f"[VENO] Wordlist not found: {value}", "red", bold=True, bg="black")
-                        if console:
-                            console.print(err)
-                        else:
-                            print(err)
+                        err_msg = f"[VENO] Wordlist not found: {value}"
+                        msg = color(err_msg, "red", bold=True)
+                        console.print(msg) if console else print(msg)
                         continue
                     config["wordlist"] = value
+
                 elif option == "domain":
                     if not validate_domain(value):
-                        err = color("[VENO] Invalid domain name.", "red", bold=True, bg="black")
-                        if console:
-                            console.print(err)
-                        else:
-                            print(err)
+                        err = color("[VENO] Invalid domain name.", "red", bold=True)
+                        console.print(err) if console else print(err)
                         continue
                     config["domain"] = value
+
                 elif option == "subscan":
                     config["subscan"] = value.lower() == "true"
+
                 elif option == "intensity":
                     merge_intensity(config, value)
+
+                elif option == "dir_fuzz_tool":
+                    if not validate_dir_fuzz_tool(value):
+                        err = color("[VENO] dir_fuzz_tool must be 'ffuf' or 'dirsearch'", "red", bold=True)
+                        console.print(err) if console else print(err)
+                        continue
+                    config["dir_fuzz_tool"] = value
+
                 else:
-                    err = color(f"[VENO] Unknown option: {option}", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
+                    err = color(f"[VENO] Unknown option: {option}", "red", bold=True)
+                    console.print(err) if console else print(err)
+
             elif cmd == "run":
-                if not config.get("domain"):
-                    err = color("[VENO] Please set a valid domain before running.", "red", bold=True, bg="black")
-                    if console:
-                        console.print(err)
-                    else:
-                        print(err)
+                if not config["domain"]:
+                    err = color("[VENO] Error: Please set a valid domain.", "red", bold=True)
+                    console.print(err) if console else print(err)
                     continue
+
                 ensure_output_dirs(config)
                 error_log = os.path.join(config["output_dir"], config["domain"], "errors.log")
-                if console:
-                    console.print(color("[VENO] Starting scan...", "yellow", bold=True))
-                else:
-                    print(color("[VENO] Starting scan...", "yellow", bold=True))
+                try:
+                    os.makedirs(os.path.dirname(error_log), exist_ok=True)
+                except OSError as exc:
+                    logger.error(f"Failed to create error log directory: {exc}\n{traceback.format_exc()}")
+                    msg = color(f"[VENO] Failed to create error log directory: {exc}", "red", bold=True)
+                    console.print(msg) if console else print(msg)
+                    continue
+
+                console.print(color("[VENO] Starting scan...", "yellow", bold=True)) if console else print(color("[VENO] Starting scan...", "yellow", bold=True))
                 try:
                     if HAS_MEMES:
                         meme = get_ascii_meme()
-                        if console:
-                            console.print(meme)
-                        else:
-                            print(meme)
-                    run_scanner(config["domain"], config)
+                        console.print(meme) if console else print(meme)
+
+                    run_scanner(config["domain"], config, {})
+
                     msg = color("[VENO] Scan completed successfully.", "green", bold=True)
-                    if console:
-                        console.print(msg)
-                        if HAS_MEMES:
-                            console.print(get_ascii_meme())
-                    else:
-                        print(msg)
-                        if HAS_MEMES:
-                            print(get_ascii_meme())
-                except Exception as e:
-                    err = f"Scan failed: {e}"
+                    console.print(msg) if console else print(msg)
+                    if HAS_MEMES:
+                        console.print(get_insult()) if console else print(get_insult())
+
+                except Exception as exc:
+                    error_msg = f"Scan failed: {exc}\n{traceback.format_exc()}"
                     try:
-                        with open(error_log, "a", encoding='utf-8') as ferr:
-                            ferr.write(err + "\n")
-                    except Exception as log_err:
-                        if console:
-                            console.print(color(f"[VENO] Failed to write error log: {log_err}", "red", bold=True))
-                        else:
-                            print(color(f"[VENO] Failed to write error log: {log_err}", "red", bold=True))
-                    if console:
-                        console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
-                    else:
-                        print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
-            elif cmd == "meme" and HAS_MEMES:
-                meme = get_ascii_meme()
-                if console:
-                    console.print(meme)
-                else:
-                    print(meme)
-            elif cmd == "insult" and HAS_MEMES:
-                insult = get_insult()
-                if console:
-                    console.print(insult)
-                else:
-                    print(insult)
+                        with open(error_log, "a", encoding='utf-8') as f:
+                            f.write(error_msg + "\n")
+                    except OSError as e:
+                        logger.error(f"Failed to write error log: {e}\n{traceback.format_exc()}")
+                        msg = color(f"[VENO] Failed to write error log: {e}", "red", bold=True)
+                        console.print(msg) if console else print(msg)
+
+                    msg = color(f"[VENO] {error_msg}", "red", bold=True)
+                    console.print(msg) if console else print(msg)
+
             else:
-                err = color(f"[VENO] Unknown command: {cmd}", "red", bold=True, bg="black")
-                if console:
-                    console.print(err)
-                else:
-                    print(err)
-        except Exception as e:
-            err = f"Command '{cmd}' failed: {e}"
-            # Fallback to console print if error_log isn't defined yet
-            if console:
-                console.print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
-            else:
-                print(color(f"[VENO] {err}", "red", bold=True, bg="black"))
+                err = color(f"[VENO] Unknown command: {cmd}", "red", bold=True)
+                console.print(err) if console else print(err)
+
+        except Exception as exc:
+            error_msg = f"Command '{cmd}' failed: {exc}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            msg = color(f"[VENO] {error_msg}", "red", bold=True)
+            console.print(msg) if console else print(msg)
+
 
 if __name__ == "__main__":
     main()
