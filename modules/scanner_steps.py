@@ -336,53 +336,44 @@ def step_wayback_urls(domain, config, context):
         context.setdefault("failures", []).append(("Wayback", str(e)))
 
     timer_end(start, "Wayback URLs")
-
 def step_waymore_urls(domain, config, context):
     if context.get("skip", False):
         return
-    if config.get("intensity") == "light":
-        print_step("⏭️ Skipping waymore (intensity: light)")
-        return
-
-    print_step("📦 Fetching URLs with Waymore")
+    print_step("📜 Gathering URLs with Waymore")
     start = timer_start()
     outdir = config.get("output_dir", "output")
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
-
-    waymore_file = os.path.join(domain_dir, "waymore_urls.txt")
+    waymore_out = os.path.join(domain_dir, "waymore.txt")
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     error_log = os.path.join(domain_dir, "errors.log")
-    urls = set()
 
     try:
-        random_delay(config.get("intensity"))
-        run_command(
-            ["waymore", "-i", domain, "-oU", waymore_file, "-mode", "U"],
-            timeout=600,
-            error_log=error_log
-        )
+        cmd = ["waymore", "-d", domain, "-o", waymore_out, "--subs", "-m"]
+        run_command(cmd, timeout=300, error_log=error_log)
 
-        if os.path.isfile(waymore_file):
-            with open(waymore_file, "r", encoding="utf-8") as f:
-                urls.update(line.strip() for line in f if line.strip())
+        extracted = set()
+        if os.path.isfile(waymore_out):
+            with open(waymore_out, "r", encoding="utf-8") as f:
+                for line in f:
+                    url = line.strip()
+                    if url:
+                        extracted.add(url)
 
-        with open(all_urls_file, "a", encoding="utf-8") as f:
-            for url in sorted(urls):
-                f.write(f"{url}\n")
+        with open(all_urls_file, "a", encoding="utf-8") as out:
+            for url in sorted(extracted):
+                out.write(url + "\n")
 
-        context["waymore_urls"] = sorted(urls)
-        print_found("Waymore URLs", len(urls))
-
-        if not urls:
-            alert("Waymore URLs", ["No new URLs from Waymore"])
-            context.setdefault("failures", []).append(("Waymore", "0 URLs"))
+        print_found("Waymore URLs", len(extracted))
+        context.setdefault("urls", []).extend(sorted(extracted))
 
     except Exception as e:
         alert_error(f"Waymore failed: {e}", error_log)
         context.setdefault("failures", []).append(("Waymore", str(e)))
 
     timer_end(start, "Waymore URL Collection")
+
+
 
 def step_parse_param_urls(domain, config, context):
     if context.get("skip", False):
@@ -426,6 +417,7 @@ def step_parse_param_urls(domain, config, context):
             with open(param_urls_file, "w", encoding="utf-8") as f:
                 f.write("all_urls.txt missing or empty.\n")
             logger.warning("No all_urls.txt available")
+            print_step("⚠️ all_urls.txt missing or empty — skipping param parse")
             alert("Param Parse", ["all_urls.txt missing or empty"])
             context.setdefault("failures", []).append(("Param Parse", "Missing input"))
 
@@ -434,7 +426,6 @@ def step_parse_param_urls(domain, config, context):
         context.setdefault("failures", []).append(("Param Parse", str(e)))
 
     timer_end(start, "Parameter URL Extraction")
-
 def step_probe_param_urls(domain, config, context):
     if context.get("skip", False):
         return
@@ -456,12 +447,13 @@ def step_probe_param_urls(domain, config, context):
     urls = context.get("param_urls", [])
     if not urls and os.path.isfile(param_urls_file):
         with open(param_urls_file, "r", encoding="utf-8") as f:
-            urls = [line.strip() for line in f if line.strip()]
+            urls = [line.strip() for line in f if line.strip() and not line.startswith("all_urls.txt")]
 
     if not urls:
         with open(live_param_urls_file, "w", encoding="utf-8") as f:
             f.write("No parameter URLs available for probing.\n")
         logger.warning("No parameter URLs available.")
+        print_step("🚫 No parameter URLs to probe")
         alert("Live Param Probe", ["Missing input URLs"])
         context.setdefault("failures", []).append(("Probe Param URLs", "Missing input"))
         return
@@ -490,6 +482,7 @@ def step_probe_param_urls(domain, config, context):
         context.setdefault("failures", []).append(("Probe Param URLs", str(exc)))
 
     context["live_param_urls"] = sorted(live_param_urls)
+    print_step(f"⚡ Live param URLs: {len(live_param_urls)}")
     print_found("Live Param URLs", len(live_param_urls))
 
     if not live_param_urls:
@@ -498,43 +491,27 @@ def step_probe_param_urls(domain, config, context):
 
     timer_end(start, "Live Parameter URL Probing")
 
+
+
 def step_param_discovery(domain, config, context):
     if context.get("skip", False):
         return
-    if config.get("intensity") == "light":
-        print_step("⏭️ Skipping param discovery (intensity: light)")
-        return
-
-    print_step("🕷️ Discovering dynamic parameters (ParamSpider + Arjun + Regex Grep)")
-    start_time = timer_start()
+    print_step("🔎 Discovering parameters with Arjun")
+    start = timer_start()
     outdir = config.get("output_dir", "output")
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
 
-    paramspider_out = os.path.join(domain_dir, "paramspider.txt")
-    arjun_input = os.path.join(domain_dir, "arjun_urls.txt")
-    arjun_out = os.path.join(domain_dir, "arjun.txt")
+    arjun_out = os.path.join(domain_dir, "arjun_params.txt")
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     error_log = os.path.join(domain_dir, "errors.log")
+
     urls = set()
-    vuln_urls = set()
+    if os.path.isfile(all_urls_file):
+        with open(all_urls_file, "r", encoding="utf-8") as f:
+            urls.update([line.strip() for line in f if line.strip().startswith("http")])
 
-    # ===== ParamSpider Scan =====
-    try:
-        with open(paramspider_out, "w", encoding='utf-8') as fout:
-            run_command(["paramspider", "-d", domain], timeout=300, error_log=error_log, stdout=fout)
-
-        if os.path.isfile(paramspider_out):
-            with open(paramspider_out, "r", encoding='utf-8') as f:
-                for line in f:
-                    if "http" in line and "=" in line:
-                        urls.add(line.strip())
-
-    except Exception as e:
-        alert_error("ParamSpider failed", error_log)
-        context.setdefault("failures", []).append(("ParamSpider", str(e)))
-
-    # ===== Grep from all_urls.txt =====
+    # Grep for param-style URLs from all_urls.txt
     try:
         if os.path.isfile(all_urls_file) and os.path.getsize(all_urls_file) > 0:
             param_regex = re.compile(r"\?.+=.+|\.(php|asp|aspx|jsp)(\?|/|$)", re.I)
@@ -547,105 +524,104 @@ def step_param_discovery(domain, config, context):
         alert_error("Failed to grep from all_urls.txt", error_log)
         context.setdefault("failures", []).append(("Param Grep", str(e)))
 
-    # ===== Arjun Enumeration =====
-    if urls:
-        try:
-            with open(arjun_input, "w", encoding="utf-8") as f:
-                for url in sorted(urls):
-                    f.write(f"{url}\n")
+    if not urls:
+        with open(arjun_out, "w", encoding="utf-8") as f:
+            f.write("No URLs found for Arjun.")
+        logger.warning("No URLs found in all_urls.txt for Arjun")
+        context.setdefault("failures", []).append(("Arjun", "No input URLs"))
+        timer_end(start, "Param Discovery")
+        return
 
-            random_delay(config.get("intensity"))
-            run_command(
-                ["arjun", "-i", arjun_input, "-oT", arjun_out, "-t", "10", "-d", "0.5"],
-                timeout=300,
-                error_log=error_log
-            )
+    discovered = set()
+    try:
+        for url in urls:
+            cmd = ["arjun", "-u", url, "--get", "--silent"]
+            result = run_command(cmd, timeout=60, error_log=error_log, capture_output=True)
+            if result:
+                for line in result.splitlines():
+                    if line.strip().startswith("http") and ("=" in line or "?" in line):
+                        discovered.add(line.strip())
+        with open(arjun_out, "w", encoding="utf-8") as f:
+            for url in sorted(discovered):
+                f.write(url + "")
+        with open(all_urls_file, "a", encoding="utf-8") as out:
+            for url in sorted(discovered):
+                out.write(url + "")
+        print_found("Arjun Params", len(discovered))
+        context.setdefault("urls", []).extend(sorted(discovered))
 
-            if os.path.isfile(arjun_out):
-                with open(arjun_out, "r", encoding="utf-8") as f:
-                    for line in f:
-                        match = re.search(r"(http\S+)", line)
-                        if match:
-                            vuln_urls.add(match.group(1))
+    except Exception as e:
+        alert_error(f"Arjun crashed: {e}", error_log)
+        context.setdefault("failures", []).append(("Arjun", str(e)))
 
-            try:
-                os.remove(arjun_input)
-            except:
-                pass
+    timer_end(start, "Param Discovery")
+    return
 
-        except Exception as e:
-            alert_error("Arjun failed", error_log)
-            context.setdefault("failures", []).append(("Arjun", str(e)))
+    discovered = set()
+    try:
+        for url in urls:
+            cmd = ["arjun", "-u", url, "--get", "--silent"]
+            result = run_command(cmd, timeout=60, error_log=error_log, capture_output=True)
+            if result:
+                for line in result.splitlines():
+                    if line.strip().startswith("http") and ("=" in line or "?" in line):
+                        discovered.add(line.strip())
+        with open(arjun_out, "w", encoding="utf-8") as f:
+            for url in sorted(discovered):
+                f.write(url + "")
+        with open(all_urls_file, "a", encoding="utf-8") as out:
+            for url in sorted(discovered):
+                out.write(url + "")
+        print_found("Arjun Params", len(discovered))
+        context.setdefault("urls", []).extend(sorted(discovered))
 
-    context["vuln_urls"] = sorted(vuln_urls)
-    print_found("Vuln Param URLs", len(vuln_urls))
+    except Exception as e:
+        alert_error(f"Arjun crashed: {e}", error_log)
+        context.setdefault("failures", []).append(("Arjun", str(e)))
 
-    if not vuln_urls:
-        alert("Param Discovery", ["No vulnerable parameters found"])
-        context.setdefault("failures", []).append(("Param Discovery", "No vuln URLs"))
+    timer_end(start, "Param Discovery")
 
-    timer_end(start_time, "Parameter Discovery (Active + Passive)")
 
 def step_hakrawler_crawl(domain, config, context):
     if context.get("skip", False):
         return
-    if config.get("intensity") == "light":
-        print_step("⏭️ Skipping crawling (intensity: light)")
-        return
-
-    print_step("🕸️ Crawling with Hakrawler")
+    print_step("🕷️ Crawling with Hakrawler")
     start = timer_start()
     outdir = config.get("output_dir", "output")
     domain_dir = os.path.join(outdir, domain)
-    raw_dir = os.path.join(domain_dir, "raw")
-    os.makedirs(raw_dir, exist_ok=True)
-
-    hakrawler_raw = os.path.join(raw_dir, "hakrawler_raw.txt")
-    hakrawler_clean = os.path.join(domain_dir, "hakrawler_cleaned.txt")
+    os.makedirs(domain_dir, exist_ok=True)
+    hakrawler_out = os.path.join(domain_dir, "hakrawler.txt")
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     error_log = os.path.join(domain_dir, "errors.log")
-    crawled_urls = set()
-
-    if not shutil.which("hakrawler"):
-        logger.warning("[hakrawler] Not installed. Skipping.")
-        alert("Hakrawler", ["Binary not found in PATH"])
-        context.setdefault("failures", []).append(("Hakrawler", "Binary missing"))
-        return
 
     try:
-        with open(hakrawler_raw, "w", encoding="utf-8") as fout:
-            run_command(["hakrawler", "-u", f"https://{domain}", "-depth", "3"], timeout=300, error_log=error_log, stdout=fout)
+        cmd = ["hakrawler", "-url", f"https://{domain}", "-depth", "3"]
+        result = run_command(cmd, timeout=180, error_log=error_log, capture_output=True)
 
-        if os.path.isfile(hakrawler_raw):
-            with open(hakrawler_raw, "r", encoding="utf-8") as f:
-                for line in f:
-                    url = line.strip()
-                    if url.startswith("http"):
-                        crawled_urls.add(url)
-
-        context["hakrawler_urls"] = sorted(crawled_urls)
-
-        if crawled_urls:
-            with open(hakrawler_clean, "w", encoding="utf-8") as f:
-                f.write("# Cleaned Hakrawler URLs\n")
-                for url in sorted(crawled_urls):
+        if result:
+            urls = set()
+            for line in result.splitlines():
+                if "http" in line:
+                    urls.add(line.strip())
+            with open(hakrawler_out, "w", encoding="utf-8") as f:
+                for url in sorted(urls):
                     f.write(url + "\n")
-            with open(all_urls_file, "a", encoding="utf-8") as f:
-                for url in sorted(crawled_urls):
-                    f.write(url + "\n")
+            with open(all_urls_file, "a", encoding="utf-8") as out:
+                for url in sorted(urls):
+                    out.write(url + "\n")
+            print_found("Hakrawler URLs", len(urls))
+            context.setdefault("urls", []).extend(sorted(urls))
         else:
-            with open(hakrawler_clean, "w", encoding="utf-8") as f:
-                f.write("No URLs found.\n")
-            alert("Hakrawler", ["No URLs discovered during crawl"])
+            logger.warning("Hakrawler returned no URLs.")
+            with open(hakrawler_out, "w", encoding="utf-8") as f:
+                f.write("No URLs found by hakrawler.\n")
             context.setdefault("failures", []).append(("Hakrawler", "0 URLs"))
-
-        print_found("Hakrawler URLs", len(crawled_urls))
 
     except Exception as e:
         alert_error(f"Hakrawler crawl failed: {e}", error_log)
         context.setdefault("failures", []).append(("Hakrawler", str(e)))
 
-    timer_end(start, "Hakrawler crawling")
+    timer_end(start, "Hakrawler Crawl")
 
 def step_dig_dns(domain, config, context):
     print_step("🔎 Gathering DNS records with dig")
@@ -716,6 +692,8 @@ def step_naabu_ports(domain, config, context):
     error_log = os.path.join(domain_dir, "errors.log")
     ports = set()
 
+    targets = context.get("live_subdomains", []) or [domain]
+
     if not shutil.which("naabu"):
         alert("Naabu", ["Binary not found in PATH"])
         context.setdefault("failures", []).append(("Naabu", "Binary missing"))
@@ -723,25 +701,24 @@ def step_naabu_ports(domain, config, context):
 
     try:
         port_range = "1-65535" if config.get("intensity") == "deep" else "80,443,8080,8443"
-        cmd = ["naabu", "-host", domain, "-o", naabu_out, "-silent", "-p", port_range, "-rate", "500"]
-        run_command(cmd, timeout=300, error_log=error_log)
-
-        if os.path.isfile(naabu_out):
-            with open(naabu_out, "r", encoding="utf-8") as f:
-                for line in f:
-                    parts = line.strip().split(":")
-                    if len(parts) == 2 and parts[1].isdigit():
-                        ports.add(parts[1])
+        with open(naabu_out, "w", encoding="utf-8") as f:
+            for target in targets:
+                cmd = ["naabu", "-host", target, "-p", port_range, "-silent", "-rate", "500"]
+                result = run_command(cmd, timeout=180, error_log=error_log, capture_output=True)
+                if result:
+                    for line in result.splitlines():
+                        parts = line.strip().split(":")
+                        if len(parts) == 2 and parts[1].isdigit():
+                            port = parts[1]
+                            ports.add(port)
+                            f.write(f"{line.strip()}\n")
 
         context["open_ports"] = sorted(ports)
-
         if ports:
             print_found("Open Ports", len(ports))
             alert("Open Ports", sorted(ports))
         else:
             logger.info("No open ports detected by Naabu.")
-            with open(naabu_out, "w", encoding="utf-8") as f:
-                f.write("No open ports detected.\n")
             context.setdefault("failures", []).append(("Naabu", "0 ports"))
 
     except Exception as e:
@@ -826,7 +803,7 @@ def step_scan_sensitive_files(domain, config, context):
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
 
-    wayback_file = context.get('wayback_urls', os.path.join(domain_dir, "waybackurls.txt"))
+    wayback_file = context.get("wayback_urls", os.path.join(domain_dir, "waybackurls.txt"))
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     sensitive_file = os.path.join(domain_dir, "sensitive_files.txt")
     error_log = os.path.join(domain_dir, "errors.log")
@@ -834,44 +811,51 @@ def step_scan_sensitive_files(domain, config, context):
 
     sensitive_patterns = [
         r"\.env$", r"\.bak$", r"\.sql$", r"\.config$", r"\.json$", r"\.log$",
-        r"\.git/", r"wp-config\.php$", r"admin/", r"backup/", r"token", r"secret", r"credentials", r"\.key$", r"\.crt$"
+        r"\.git/", r"wp-config\.php$", r"admin/", r"backup/", r"token", r"secret", r"credentials", r"\.key$", r"\.crt$",
+        r"\.ini$", r"\.xml$", r"\.yml$", r"\.yaml$", r"\.DS_Store$", r"id_rsa$", r"\.pem$", r"/debug", r"dump", r"\.cache$",
+        r"\.zip$", r"\.rar$", r"\.tar\.gz$", r"\.7z$", r"backup", r"/old/", r"/private/", r"/tmp/", r"passwords", r"userlist",
+        r"database", r"\.bakup$", r"\.db$"
     ]
     sensitive_regex = re.compile("|".join(sensitive_patterns), re.I)
     keywords = ["password", "secret", "token", "auth", "key", "db", "access"]
 
-    urls = []
+    urls = set()
     for file in [wayback_file, all_urls_file]:
         if os.path.isfile(file) and os.path.getsize(file) > 0:
             with open(file, "r", encoding="utf-8") as f:
-                urls += [line.strip() for line in f if sensitive_regex.search(line)]
+                urls.update([line.strip() for line in f if sensitive_regex.search(line)])
 
-    if urls:
-        try:
-            with open(sensitive_file, "w", encoding="utf-8") as fout:
-                found = False
-                for url in urls:
-                    is_live, has_sensitive = url_check(url, keywords)
-                    if is_live:
-                        found = True
-                        label = "[SENSITIVE]" if has_sensitive else "[LIVE]"
-                        fout.write(f"{label} {url}\n")
-                        if has_sensitive:
-                            sensitive_urls.add(url)
-                    random_delay(config.get("intensity"))
-                if not found:
-                    fout.write("No sensitive files or links found.\n")
-        except Exception as e:
-            alert_error(f"Sensitive scan failed: {e}", error_log)
-            context.setdefault("failures", []).append(("Sensitive Files", str(e)))
-    else:
+    if not urls:
+        logger.warning("No matching URLs for sensitive scan.")
         with open(sensitive_file, "w", encoding="utf-8") as f:
-            f.write("No URLs for sensitive file scanning.\n")
-        logger.warning("No URLs for sensitive file scan.")
+            f.write("No URLs matched sensitive patterns.\n")
+        alert("Sensitive Scan", ["No sensitive-patterned URLs found"])
+        context.setdefault("failures", []).append(("Sensitive Files", "No pattern matches"))
+        timer_end(start, "Sensitive file scanning")
+        return
+
+    try:
+        with open(sensitive_file, "w", encoding="utf-8") as fout:
+            found = False
+            for url in urls:
+                is_live, has_sensitive = url_check(url, keywords)
+                if is_live:
+                    found = True
+                    label = "[SENSITIVE]" if has_sensitive else "[LIVE]"
+                    fout.write(f"{label} {url}\n")
+                    if has_sensitive:
+                        sensitive_urls.add(url)
+                random_delay(config.get("intensity"))
+            if not found:
+                fout.write("No sensitive files or links found.\n")
+    except Exception as e:
+        alert_error(f"Sensitive scan failed: {e}", error_log)
+        context.setdefault("failures", []).append(("Sensitive Files", str(e)))
 
     context["sensitive_urls"] = sorted(sensitive_urls)
     print_found("Sensitive Files", len(sensitive_urls))
-
     timer_end(start, "Sensitive file scanning")
+
 def step_scan_juicy_info(domain, config, context):
     if context.get("skip", False):
         return
@@ -888,8 +872,6 @@ def step_scan_juicy_info(domain, config, context):
     wayback_file = context.get('wayback_urls', os.path.join(domain_dir, "waybackurls.txt"))
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     juicy_file = os.path.join(domain_dir, "juicy_info.txt")
-    js_dir = os.path.join(domain_dir, "js_files")
-    os.makedirs(js_dir, exist_ok=True)
     error_log = os.path.join(domain_dir, "errors.log")
     juicy_urls = set()
 
@@ -898,49 +880,48 @@ def step_scan_juicy_info(domain, config, context):
         r"aws[_-]?key", r"auth[_-]?token", r"credential", r"s3\.amazonaws\.com",
         r"firebase", r"client[_-]?id", r"client_secret", r"oauth[_-]?access_token",
         r"database[_-]?url", r"mongodb://", r"mysql://", r"postgres://", r"slack_token",
+        r"bearer[_-]?token", r"jwt=", r"x-api-key", r"shopify[_-]?token", r"stripe[_-]?key",
+        r"access[_-]?token", r"authorization=[a-zA-Z0-9-_]+", r"x-amz-signature", r"x-goog-signature",
+        r"x-rapidapi-key", r"github[_-]?token", r"gcp[_-]?key", r"cloudinary[_-]?url",
+        r"webhook[_-]?url", r"zoom[_-]?token", r"heroku[_-]?key", r"netlify[_-]?token",
+        r"digitalocean[_-]?token", r"bitbucket[_-]?key", r"twilio[_-]?auth[_-]?token"
+    r"]?key", r"token", r"password", r"secret_key", r"access[_-]?key",
+        r"aws[_-]?key", r"auth[_-]?token", r"credential", r"s3\.amazonaws\.com",
+        r"firebase", r"client[_-]?id", r"client_secret", r"oauth[_-]?access_token",
+        r"database[_-]?url", r"mongodb://", r"mysql://", r"postgres://", r"slack_token",
         r"bearer[_-]?token", r"jwt="
     ]
-    false_positive = re.compile(r"csrf_token|xsrf_token|nonce|form_token", re.I)
     pattern_regex = re.compile("|".join(pattern_keywords), re.I)
+    false_positive = re.compile(r"csrf_token|xsrf_token|nonce|form_token", re.I)
 
-    urls = []
-    for url_file in [wayback_file, all_urls_file]:
-        if os.path.isfile(url_file) and os.path.getsize(url_file) > 0:
-            try:
-                with open(url_file, "r", encoding="utf-8") as fin:
-                    urls.extend(line.strip() for line in fin if pattern_regex.search(line))
-            except Exception as exc:
-                alert_error(f"Error reading {url_file}", error_log)
-                context.setdefault("failures", []).append(("Juicy Info Read", str(exc)))
+    urls = set()
+    for file in [wayback_file, all_urls_file]:
+        if os.path.isfile(file) and os.path.getsize(file) > 0:
+            with open(file, "r", encoding="utf-8") as fin:
+                urls.update(line.strip() for line in fin if pattern_regex.search(line))
 
-    if urls:
-        try:
-            with open(juicy_file, "w", encoding="utf-8") as fout:
-                for url in urls:
-                    if false_positive.search(url):
-                        continue
-                    is_live, _ = url_check(url)
-                    if is_live:
-                        juicy_urls.add(url)
-                        fout.write(f"[LIVE] {url}\n")
-                        if url.endswith(('.js', '.jsx')):
-                            try:
-                                r = requests.get(url, headers={"User-Agent": get_random_user_agent()}, timeout=5, verify=False)
-                                if r.status_code == 200:
-                                    js_name = f"js_{hashlib.md5(url.encode()).hexdigest()}.js"
-                                    with open(os.path.join(js_dir, js_name), "w", encoding="utf-8") as fj:
-                                        fj.write(r.text)
-                            except Exception as e:
-                                logger.debug(f"JS download failed: {url} - {e}")
-                    random_delay(config.get("intensity"))
-                if not juicy_urls:
-                    fout.write("No juicy info found.\n")
-        except Exception as e:
-            alert_error(f"Juicy info scan failed: {e}", error_log)
-            context.setdefault("failures", []).append(("Juicy Info", str(e)))
-    else:
+    if not urls:
         with open(juicy_file, "w", encoding="utf-8") as f:
-            f.write("No juicy URLs to scan.\n")
+            f.write("No juicy-patterned URLs found.\n")
+        alert("Juicy Info", ["No matching URLs found"])
+        context.setdefault("failures", []).append(("Juicy Info", "No pattern match"))
+        timer_end(start, "Juicy info scan")
+        return
+
+    try:
+        with open(juicy_file, "w", encoding="utf-8") as fout:
+            for url in urls:
+                if false_positive.search(url):
+                    continue
+                is_live, _ = url_check(url)
+                if is_live:
+                    juicy_urls.add(url)
+                    fout.write(f"[LIVE] {url}\n")
+        if not juicy_urls:
+            fout.write("No juicy info found.\n")
+    except Exception as e:
+        alert_error(f"Juicy info scan failed: {e}", error_log)
+        context.setdefault("failures", []).append(("Juicy Info", str(e)))
 
     context["juicy_urls"] = sorted(juicy_urls)
     print_found("Juicy Info", len(juicy_urls))
@@ -1127,8 +1108,9 @@ def step_nuclei_scan(domain, config, context):
         context.setdefault("failures", []).append(("Nuclei", "Binary missing"))
         return
 
-    if not os.path.isfile(live_param_urls_file) or os.path.getsize(live_param_urls_file) == 0:
+    if not context.get("live_param_urls") and (not os.path.isfile(live_param_urls_file) or os.path.getsize(live_param_urls_file) == 0):
         logger.warning("Nuclei input missing.")
+        print_step("🚫 Skipping Nuclei — no live param URLs")
         with open(nuclei_out, "w", encoding="utf-8") as f:
             f.write("No input for Nuclei scan.\n")
         return
@@ -1367,19 +1349,18 @@ def get_steps_for_intensity(intensity):
             step_waymore_urls,
             step_parse_param_urls,
             step_probe_param_urls,
+            step_subjack_takeover,
             step_param_discovery,
+            step_hakrawler_crawl,
             step_scan_sensitive_files,
             step_scan_juicy_info,
-            step_hakrawler_crawl,
-            step_nuclei_scan,
             step_dir_fuzz,
             
         ])
     if intensity == "deep":
         steps.extend([
-            step_subjack_takeover,
-            step_naabu_ports,
             step_gf_patterns,
+            step_naabu_ports,
             step_advanced_xss,
             step_nuclei_scan,
             step_sqlmap,
