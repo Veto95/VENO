@@ -52,7 +52,7 @@ def banner():
     print("     BUG BOUNTY & RECON TOOL")
     type_effect(f"{reset}—-—-—-—-—-—-—-—-—-—-—-—-—-—-—--")
     type_effect(f"{cyan}    Coder: 0xCACT2S")
-    print("    Telegram: HELL SHELL https://t.me/hacking_hell1")
+    print("    Telegram: HELL SHELL https://t.me/H3LL_SH3LL")
     print("    Contact: https://t.me/CACT2S")
     print("    GitHub: https://github.com/Veto95/VENO")
     for line in phrase_lines:
@@ -73,7 +73,7 @@ def get_banner_html():
     VENO v1.0
     BUG BOUNTY & RECON TOOL
     Coder: 0xCACT2S
-    Telegram: HELL SHELL [https://t.me/hacking_hell1]
+    Telegram: HELL SHELL [https://t.me/H3LL_SH3LL]
     Contact: [https://t.me/CACT2S]
     GitHub: https://github.com/Veto95/VENO
     [Bug bounty flavor lines here!]
