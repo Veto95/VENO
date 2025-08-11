@@ -206,7 +206,7 @@ def step_subdomain_enum(domain, config, context):
                     subs.update(re.findall(rf"[\w\-.]+\.{re.escape(domain)}", output, re.IGNORECASE))
         elif intensity in ["medium", "deep"]:
             alert_error("theHarvester not found. Skipping subdomain enumeration with theHarvester.", error_log)
-            context.setdefault("failures", []).append(("the PUSH YOUR LIMITS! 🚀Harvester", "Binary missing"))
+            context.setdefault("failures", []).append(("theHarvester", "Binary missing"))
 
         if not subs:
             alert("Subdomain Enum", ["No subdomains found"])
@@ -227,7 +227,7 @@ def step_subdomain_enum(domain, config, context):
                     with open(temp_sub_input, "w", encoding="utf-8") as f:
                         f.write("\n".join(subs))
 
-                    probe_cmd = ["httprobe", "-c", "100", "-t", "15000", "-p", "http:80,https:443"]
+                    probe_cmd = ["httprobe", "-c", "50", "-t", "15000", "-p", "http:80,https:443"]
                     probe = subprocess.Popen(
                         probe_cmd,
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="ignore"
@@ -272,7 +272,7 @@ def step_subdomain_enum(domain, config, context):
                             cmd = ["httping", "-c", "1", "-t", "5", f"{proto}://{sub}"]
                             result = run_command(cmd, timeout=100, error_log=error_log, capture_output=True)
                             if result and ("connected to" in result.lower() or "200 ok" in result.lower()):
-                                live_subs.add(f"{proto}://{sub}".split('//')[1])
+                                live_subs.add(sub)
                                 break
                     except Exception as exc:
                         logger.warning(f"httping failed for {sub}: {exc}")
@@ -298,6 +298,54 @@ def step_subdomain_enum(domain, config, context):
         alert_error(f"Subdomain enumeration failed: {exc}", error_log)
         context.setdefault("failures", []).append(("Subdomain Enum", str(exc)))
     timer_end(start, "Subdomain enumeration")
+
+def step_crawl_live_subdomains(domain, config, context):
+    if context.get("skip", False):
+        return
+    print_step("🕷️ Crawling live subdomains to find more URLs")
+    start = timer_start()
+    outdir = config.get("output_dir", "output")
+    domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+    all_urls_file = os.path.join(domain_dir, "all_urls.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
+    live_subs = context.get("live_subdomains", [])
+    if not live_subs:
+        logger.warning("No live subdomains to crawl.")
+        return
+    if not shutil.which("katana"):
+        alert("Katana", ["Binary not found. Skipping crawling."])
+        context.setdefault("failures", []).append(("Katana", "Binary missing"))
+        return
+    crawled_urls = set()
+    for sub in live_subs:
+        try:
+            cmd = ["katana", "-u", f"https://{sub}", "-d", "2", "-silent"]
+            result = run_command(cmd, timeout=1000, error_log=error_log, capture_output=True)
+            if result:
+                for line in result.splitlines():
+                    url = line.strip()
+                    if url:
+                        crawled_urls.add(url)
+        except Exception as e:
+            logger.warning(f"Katana failed for {sub}: {e}")
+    if crawled_urls:
+        existing_urls = set()
+        if os.path.isfile(all_urls_file):
+            with open(all_urls_file, "r", encoding="utf-8") as f:
+                existing_urls = set(line.strip() for line in f)
+        new_urls = crawled_urls - existing_urls
+        if new_urls:
+            with open(all_urls_file, "a", encoding="utf-8") as f:
+                for url in sorted(new_urls):
+                    f.write(f"{url}\n")
+            context.setdefault("urls", []).extend(sorted(new_urls))
+            print_found("Crawled URLs", len(new_urls))
+        else:
+            logger.info("No new URLs found from crawling.")
+    else:
+        logger.warning("No URLs found from crawling.")
+    timer_end(start, "Live Subdomains Crawling")
 
 def step_subjack_takeover(domain, config, context):
     if context.get("skip", False):
@@ -336,7 +384,7 @@ def step_subjack_takeover(domain, config, context):
             "subjack", "-w", input_file, "-o", output_file,
             "-t", str(config.get("threads", 20)), "-timeout", "60", "-ssl"
         ]
-        run_command(cmd, timeout=900, error_log=error_log)
+        run_command(cmd, timeout=1000, error_log=error_log)
 
         if os.path.isfile(output_file):
             with open(output_file, "r", encoding="utf-8") as f:
@@ -445,7 +493,7 @@ def step_waymore_urls(domain, config, context):
         return
 
     stdout = run_command(
-        ["waymore", "-i", domain, "-oU", waymore_file, "-mode", "U", "-f", "json"],
+        ["waymore", "-i", domain, "-oU", waymore_file, ],
         timeout=1200,
         error_log=error_log,
         capture_output=True
@@ -632,7 +680,7 @@ def step_probe_param_urls(domain, config, context):
         success = False
         for attempt in range(retries):
             try:
-                probe_cmd = ["httprobe", "-c", str(config.get("threads", 100)), "-t", "15000", "-p", "http:80,https:443"]
+                probe_cmd = ["httprobe", "-c", str(config.get("threads", 50)), "-t", "15000", "-p", "http:80,https:443"]
                 probe = subprocess.Popen(
                     probe_cmd,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="ignore"
@@ -750,7 +798,7 @@ def step_extract_juicy_info(domain, config, context):
     domain_dir = os.path.join(outdir, domain)
     os.makedirs(domain_dir, exist_ok=True)
 
-    uro_params_file = os.path.join(domain_dir, "uro_params.txt")
+    uro_params_file = os.path.join(domain_dir, "all_urls.txt")
     juicy_file = os.path.join(domain_dir, "juicy_info.txt")
     error_log = os.path.join(domain_dir, "errors.log")
 
@@ -881,6 +929,8 @@ def step_js_scan(domain, config, context):
 
     all_urls_file = os.path.join(domain_dir, "all_urls.txt")
     js_findings_file = os.path.join(domain_dir, "js_findings.txt")
+    js_dir = os.path.join(domain_dir, "js_files")
+    os.makedirs(js_dir, exist_ok=True)
     error_log = os.path.join(domain_dir, "errors.log")
     js_urls = []
     secrets = []
@@ -952,9 +1002,9 @@ def step_js_scan(domain, config, context):
         js_pattern = re.compile(r"\.js$", re.I)
         js_urls = [url for url in urls if js_pattern.search(url)]
         if not js_urls:
-            logger.warning("No .js URLs found for scanning.")
+            logger.warning("No .js URLs found in all_urls.")
             with open(js_findings_file, "w", encoding="utf-8") as f:
-                f.write("No .js URLs found for scanning.\n")
+                f.write("No .js URLs found in all_urls.\n")
             context["js_findings"] = {"secrets": [], "endpoints": []}
             context.setdefault("failures", []).append(("JS Scan", "No JS URLs"))
             timer_end(start, "JavaScript Scanning")
@@ -981,7 +1031,7 @@ def step_js_scan(domain, config, context):
             temp_js_input = os.path.join(domain_dir, "temp_js_probe_input.txt")
             with open(temp_js_input, "w", encoding="utf-8") as f:
                 f.write("\n".join(js_urls))
-            probe_cmd = ["httprobe", "-c", str(config.get("threads", 100)), "-t", "15000", "-p", "http:80,https:443"]
+            probe_cmd = ["httprobe", "-c", str(config.get("threads", 50)), "-t", "15000", "-p", "http:80,https:443"]
             probe = subprocess.Popen(
                 probe_cmd,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="ignore"
@@ -1002,43 +1052,44 @@ def step_js_scan(domain, config, context):
             timer_end(start, "JavaScript Scanning")
             return
 
-        # Scan JS files with curl and regex
+        # Download JS files
+        downloaded_files = []
         for url in live_js_urls[:50]:  # Limit to 50 to avoid rate-limiting
             random_delay(config.get("intensity", "medium"))
-            cmd = ["curl", "-s", "-A", get_random_user_agent(), "-m", "10", url]
+            filename = os.path.join(js_dir, urlparse(url).path.split('/')[-1] or "index.js")
+            cmd = ["curl", "-s", "-A", get_random_user_agent(), "-m", "10", "-o", filename, url]
             proxy = get_proxy()
             if proxy:
                 cmd.extend(["-x", proxy.get("http", "")])
-            content = run_command(cmd, timeout=15, error_log=error_log, capture_output=True)
-            if content:
-                for match in secret_regex.finditer(content):
-                    secret = match.group(0)
-                    if not false_positive.search(secret):
-                        secrets.append(f"{url}: {secret}")
-                for match in endpoint_regex.finditer(content):
-                    endpoint = match.group(0).strip("'\"")
-                    endpoints.append(f"{url}: {endpoint}")
+            run_command(cmd, timeout=15, error_log=error_log)
+            if os.path.isfile(filename) and os.path.getsize(filename) > 0:
+                downloaded_files.append(filename)
+                with open(filename, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                    for match in secret_regex.finditer(content):
+                        secret = match.group(0)
+                        if not false_positive.search(secret):
+                            secrets.append(f"{url}: {secret}")
+                    for match in endpoint_regex.finditer(content):
+                        endpoint = match.group(0).strip("'\"")
+                        endpoints.append(f"{url}: {endpoint}")
 
-        # Optionally use trufflehog for advanced secret scanning
-        if shutil.which("trufflehog"):
+        # Optionally use trufflehog for advanced secret scanning on downloaded files
+        if shutil.which("trufflehog") and downloaded_files:
             print_step("Running trufflehog for advanced secret scanning...")
-            temp_js_urls = os.path.join(domain_dir, "temp_js_urls.txt")
-            with open(temp_js_urls, "w", encoding="utf-8") as f:
-                f.write("\n".join(live_js_urls))
-            cmd = ["trufflehog", "filesystem", temp_js_urls, "--json"]
-            result = run_command(cmd, timeout=600, error_log=error_log, capture_output=True)
-            if result:
-                for line in result.splitlines():
-                    try:
-                        data = json.loads(line.strip())
-                        if data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem"):
-                            secret = data.get("Raw")
-                            source = data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file")
-                            secrets.append(f"{source}: {secret}")
-                    except json.JSONDecodeError:
-                        logger.warning(f"trufflehog output not JSON: {line.strip()}")
-            if os.path.exists(temp_js_urls):
-                os.remove(temp_js_urls)
+            for js_file in downloaded_files:
+                cmd = ["trufflehog", "filesystem", js_file, "--json"]
+                result = run_command(cmd, timeout=900, error_log=error_log, capture_output=True)
+                if result:
+                    for line in result.splitlines():
+                        try:
+                            data = json.loads(line.strip())
+                            if data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem"):
+                                secret = data.get("Raw")
+                                source = data.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file")
+                                secrets.append(f"{source}: {secret}")
+                        except json.JSONDecodeError:
+                            logger.warning(f"trufflehog output not JSON: {line.strip()}")
 
         # Save findings
         with open(js_findings_file, "w", encoding="utf-8") as f:
@@ -1063,6 +1114,12 @@ def step_js_scan(domain, config, context):
     except Exception as e:
         alert_error(f"JS scanning failed: {e}", error_log)
         context.setdefault("failures", []).append(("JS Scan", str(e)))
+
+    finally:
+        # Cleanup downloaded JS files
+        for file in os.listdir(js_dir):
+            os.remove(os.path.join(js_dir, file))
+        os.rmdir(js_dir)
 
     timer_end(start, "JavaScript Scanning")
 
@@ -1128,6 +1185,43 @@ def step_dig_dns(domain, config, context):
         context.setdefault("failures", []).append(("Dig", str(e)))
 
     timer_end(start, "DNS Enumeration")
+
+def step_nuclei_scan(domain, config, context):
+    if context.get("skip", False):
+        return
+    print_step("🔍 Running Nuclei scan on live subdomains")
+    start = timer_start()
+    outdir = config.get("output_dir", "output")
+    domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+    nuclei_out = os.path.join(domain_dir, "nuclei_vulns.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
+    live_subs = context.get("live_subdomains", [])
+    if not live_subs:
+        alert("Nuclei", ["No live subdomains to scan."])
+        context.setdefault("failures", []).append(("Nuclei", "No targets"))
+        return
+    if not shutil.which("nuclei"):
+        alert("Nuclei", ["Binary not found. Skipping Nuclei scan."])
+        context.setdefault("failures", []).append(("Nuclei", "Binary missing"))
+        return
+    try:
+        cmd = ["nuclei", "-l", os.path.join(domain_dir, "uro_params.txt"), "-o", nuclei_out, "-silent"]
+        run_command(cmd, timeout=1800, error_log=error_log)
+        if os.path.isfile(nuclei_out):
+            with open(nuclei_out, "r", encoding="utf-8") as f:
+                vulns = [line.strip() for line in f if line.strip()]
+            context["nuclei_vulns"] = vulns
+            print_found("Nuclei Vulnerabilities", len(vulns))
+            if vulns:
+                alert("Nuclei Findings", vulns[:10])
+        else:
+            context["nuclei_vulns"] = []
+            logger.info("No Nuclei vulnerabilities found.")
+    except Exception as e:
+        alert_error(f"Nuclei scan failed: {e}", error_log)
+        context.setdefault("failures", []).append(("Nuclei", str(e)))
+    timer_end(start, "Nuclei Scan")
 
 def step_naabu_ports(domain, config, context):
     if context.get("skip", False):
@@ -1245,7 +1339,7 @@ def step_sqlmap(domain, config, context):
     outdir = config.get("output_dir", "output")
     domain_dir = os.path.join(outdir, domain)
     error_log = os.path.join(domain_dir, "errors.log")
-    live_param_urls_file = os.path.join(domain_dir, "live_param_urls.txt")
+    live_param_urls_file = os.path.join(domain_dir, "uro_params.txt")
     sqlmap_logs = []
 
     if not shutil.which("sqlmap"):
@@ -1387,8 +1481,8 @@ def step_dir_fuzz(domain, config, context):
                 "--format=plain", f"--output={raw_out}",
                 "--full-url",
                 "--recursion-status", "200,204,301,302,307,403",
-                "--recursion-depth", "2"
-            ], timeout=8000, error_log=error_log)
+                "-R", "2"
+            ], timeout=15000, error_log=error_log)
 
             if os.path.isfile(raw_out):
                 with open(raw_out, "r", encoding="utf-8") as f:
@@ -1420,6 +1514,44 @@ def step_dir_fuzz(domain, config, context):
 
     timer_end(start, "Directory Fuzzing")
 
+def step_xss_scan(domain, config, context):
+    if context.get("skip", False):
+        return
+    print_step("🎯 Scanning for XSS vulnerabilities")
+    start = timer_start()
+    outdir = config.get("output_dir", "output")
+    domain_dir = os.path.join(outdir, domain)
+    os.makedirs(domain_dir, exist_ok=True)
+    xss_out = os.path.join(domain_dir, "xss_findings.txt")
+    error_log = os.path.join(domain_dir, "errors.log")
+    live_param_urls = context.get("live_param_urls", [])
+    if not live_param_urls:
+        alert("XSS Scan", ["No live parameter URLs to scan."])
+        context.setdefault("failures", []).append(("XSS Scan", "No targets"))
+        return
+    if not shutil.which("dalfox"):
+        alert("dalfox", ["Binary not found. Skipping XSS scan."])
+        context.setdefault("failures", []).append(("dalfox", "Binary missing"))
+        return
+    try:
+        temp_input = os.path.join(domain_dir, "temp_xss_input.txt")
+        with open(temp_input, "w", encoding="utf-8") as f:
+            f.write("\n".join(live_param_urls))
+        cmd = ["dalfox", "file", temp_input, "-o", xss_out, "--silence"]
+        run_command(cmd, timeout=1800, error_log=error_log)
+        if os.path.isfile(xss_out):
+            context["xss"] = [xss_out]
+            print_found("XSS Findings", 1)
+        else:
+            context["xss"] = []
+            logger.info("No XSS vulnerabilities found.")
+        if os.path.exists(temp_input):
+            os.remove(temp_input)
+    except Exception as e:
+        alert_error(f"XSS scan failed: {e}", error_log)
+        context.setdefault("failures", []).append(("XSS Scan", str(e)))
+    timer_end(start, "XSS Scan")
+
 def step_generate_report(domain, config, context):
     if context.get("skip", False):
         return
@@ -1444,6 +1576,7 @@ def get_steps_for_intensity(intensity):
     base_steps = [
         step_check_dependencies,
         step_subdomain_enum,
+        step_crawl_live_subdomains,
         step_wayback_urls,
         step_waymore_urls,
         step_assetfinder_crawl,
@@ -1459,7 +1592,6 @@ def get_steps_for_intensity(intensity):
         return base_steps
     
     medium_steps = base_steps + [
-        step_js_scan,
         step_subjack_takeover,
         step_dig_dns
     ]
@@ -1468,9 +1600,11 @@ def get_steps_for_intensity(intensity):
         return medium_steps
     
     deep_steps = medium_steps + [
+        step_nuclei_scan,
         step_sqlmap,
         step_dir_fuzz,
-        step_naabu_ports
+        step_naabu_ports,
+        step_xss_scan
     ]
     
     return deep_steps if intensity == "deep" else medium_steps
